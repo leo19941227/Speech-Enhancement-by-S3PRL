@@ -21,3 +21,4 @@ runner:
   log_step: 10                                          # log training status every this amount of training steps
   eval_step: 100                                         # evaluate every this amount of training steps
   max_keep: 3                                           # maximum number of model ckpt to keep during training
+  loss: "SI_SDR"                                        # Scale-Invariant Signal Distortion Ratio
