@@ -1,15 +1,3 @@
-# -*- coding: utf-8 -*- #
-"""*********************************************************************************************"""
-#   FileName     [ downstream/runner.py ]
-#   Synopsis     [ runner to perform downstream train/dev/test ]
-#   Author       [ Andy T. Liu (Andi611) ]
-#   Copyright    [ Copyleft(c), Speech Lab, NTU, Taiwan ]
-"""*********************************************************************************************"""
-
-
-###############
-# IMPORTATION #
-###############
 import os
 import math
 import torch
@@ -19,14 +7,11 @@ from torch.optim import Adam
 from tensorboardX import SummaryWriter
 from downstream.solver import get_optimizer
 
+OOM_RETRY_LIMIT = 10
 
-##########
-# RUNNER #
-##########
 class Runner():
     ''' Handler for complete training and evaluation progress of downstream models '''
-    def __init__(self, args, runner_config, dataloader, upstream, downstream, expdir):
-
+    def __init__(self, args, runner_config, dataloader, preprocessor, upstream, downstream, expdir):
         self.device = torch.device('cuda') if (args.gpu and torch.cuda.is_available()) else torch.device('cpu')
         if torch.cuda.is_available(): print('[Runner] - CUDA is available!')
         self.model_kept = []
@@ -36,15 +21,15 @@ class Runner():
         self.args = args
         self.config = runner_config
         self.dataloader = dataloader
+        self.preprocessor = preprocessor
         self.upstream_model = upstream.to(self.device)
         self.downstream_model = downstream.to(self.device)
+        self.grad_clip = self.config['gradient_clipping']
         self.expdir = expdir
 
 
     def set_model(self):
-
         if self.args.fine_tune:
-            # Setup Fine tune optimizer
             self.upstream_model.train()
             param_optimizer = list(self.upstream_model.named_parameters()) + list(self.downstream_model.named_parameters())
             self.optimizer = get_optimizer(params=param_optimizer,
@@ -59,7 +44,6 @@ class Runner():
 
 
     def save_model(self, name='states', save_best=None):
-        
         all_states = {
             'Upstream': self.upstream_model.state_dict() if self.args.fine_tune else None,
             'Downstream': self.downstream_model.state_dict(),
@@ -86,187 +70,129 @@ class Runner():
 
 
     def train(self):
-        ''' Training of downstream tasks'''
-
-        pbar = tqdm(total=int(self.config['total_steps']))
-        corrects = 0
-        valids = 0
-        best_acc = 0.0
-        best_eval_acc = 0.0
-        best_test_acc = 0.0
-        loses = 0.0
-
-        while self.global_step <= int(self.config['total_steps']):
-
-            for features, labels in tqdm(self.dataloader['train'], desc="Iteration"):
+        total_steps = int(self.config['epochs'] * len(self.dataloader['train']))
+        pbar = tqdm(total=total_steps)
+        best_metrics = {'dev': 0, 'test': 0}
+        
+        loses = 0
+        metrics = 0
+        while self.global_step <= total_steps:
+            for wavs in self.dataloader['train']:
+                # wavs: (batch_size, channel, max_len)
                 try:
-                    if self.global_step > int(self.config['total_steps']): break
+                    if self.global_step > total_steps:
+                        break
                     
-                    # features: (1, batch_size, seq_len, feature)
-                    # dimension of labels depend on task and dataset, but the first dimention is always trivial due to bucketing, eg. (1, ...)
-                    features = features.squeeze(0).to(device=self.device, dtype=torch.float32)
+                    wavs = wavs.to(device=self.device)
+                    feats_for_upstream, linear_inp, phase_inp, linear_tar, phase_tar = self.preprocessor(wavs)
+                    # all features are already in CUDA and in shape: (batch_size, max_time, feat_dim)
+                    # For reconstruction waveform from linear spectrogram ((power=2)) and phase, use the following:
+                    # wav = self.preprocessor.istft(linear, phase)
+
                     if self.args.fine_tune:
-                        features = self.upstream_model(features)
+                        features = self.upstream_model(feats_for_upstream)
                     else:
                         with torch.no_grad():
-                            features = self.upstream_model(features)
+                            features = self.upstream_model(feats_for_upstream)
 
-                    # Since zero padding technique, some timestamps of features are not valid
-                    # For each timestamps, we mark 1 on valid timestamps, and 0 otherwise
-                    # This variable can be useful for frame-wise metric, like phoneme recognition or speaker verification
+                    label_mask = (features.sum(dim=-1) != 0).long()
                     # label_mask: (batch_size, seq_len), LongTensor
-                    # valid_lengths: (batch_size), LongTensor
-                    labels = labels.squeeze(0).to(device=self.device)  # labels can be torch.long or torch.float (regression)
-                    label_mask = (features.sum(dim=-1) != 0).type(torch.LongTensor).to(device=self.device, dtype=torch.long)
-                    valid_lengths = label_mask.sum(dim=1)
+                    # Since zero padding, some timestamps of features are not valid
+                    # For each timestamps, we mark 1 on valid timestamps, and 0 otherwise
+                    # This is useful for frame-wise loss computation
 
-                    if 'utterance' in self.args.run:
-                        # labels: (batch_size, )
-                        loss, _, correct, valid = self.downstream_model(features, labels, valid_lengths)
-                    else:
-                        # labels: (batch_size, seq_len)
-                        loss, _, correct, valid = self.downstream_model(features, labels, label_mask)
-
-                    # Accumulate Loss
+                    loss, metric = self.downstream_model(features, linear_tar, label_mask)
                     loss.backward()
-
-                    # record
-                    loses += loss.detach().item()
-                    corrects += correct
-                    valids += valid
+                    loses += loss.item()
+                    metrics += metric
 
                     # gradient clipping
+                    up_paras = list(self.upstream_model.parameters())
+                    down_paras = list(self.downstream_model.parameters())
                     if self.args.fine_tune: 
-                        grad_norm = torch.nn.utils.clip_grad_norm_(list(self.upstream_model.parameters()) + list(self.downstream_model.parameters()), \
-                                                                   float(self.config['gradient_clipping']))
+                        grad_norm = torch.nn.utils.clip_grad_norm_(up_paras + down_paras, self.grad_clip)
                     else:
-                        grad_norm = torch.nn.utils.clip_grad_norm_(self.downstream_model.parameters(), \
-                                                                   float(self.config['gradient_clipping']))
-                    
-                    # step
-                    if math.isnan(grad_norm):
-                        print('[Runner] - Error : grad norm is NaN @ step ' + str(self.global_step))
-                    else:
-                        self.optimizer.step()
+                        grad_norm = torch.nn.utils.clip_grad_norm_(down_paras, self.grad_clip)
+
+                    # update parameters
+                    self.optimizer.step()
                     self.optimizer.zero_grad()
 
-                    # logging
+                    # log
                     if self.global_step % int(self.config['log_step']) == 0:
-                        # Log
-                        acc = corrects.item() / valids.item()
-                        los = loses / int(self.config['log_step'])
-                        self.log.add_scalar('acc', acc, self.global_step)
+                        los = loses / self.config['log_step']
                         self.log.add_scalar('loss', los, self.global_step)
+                        self.log.add_scalar('metric', metrics / self.config['log_step'], self.global_step)
                         self.log.add_scalar('gradient norm', grad_norm, self.global_step)
-                        pbar.set_description('Loss %.5f, Acc %.5f' % (los, acc))
+                        pbar.set_description('Loss %.5f' % (los))
+                        loses = 0
 
-                        loses = 0.0
-                        corrects = 0
-                        valids = 0
-
-                    if self.global_step % int(self.config['save_step']) == 0 and acc > best_acc:
-                        self.save_model()
-                        best_acc = acc
-
-                    # evaluate on the self.config['evaluation'] set
-                    if self.global_step % int(self.config['dev_step']) == 0:
-                        print('[Runner] - Evaluating on: ', self.config['evaluation'])
-                        torch.cuda.empty_cache()
-                        eval_loss, eval_acc, _ = self.evaluate(split=self.config['evaluation'])
-                        self.log.add_scalar(f"{self.config['evaluation']}_loss", eval_loss, self.global_step)
-                        self.log.add_scalar(f"{self.config['evaluation']}_acc", eval_acc, self.global_step)
-                        if eval_acc > best_eval_acc:
-                            print('[Runner] - Saving new best model on: ', self.config['evaluation'])
-                            self.save_model(save_best=f"best_{self.config['evaluation']}")
-                            torch.cuda.empty_cache()
-                            best_eval_acc = eval_acc
-                        
-                        # evaluate on the test set if not already
-                        if self.config['evaluation'] != 'test':
-                            torch.cuda.empty_cache()
-                            test_loss, test_acc, _ = self.evaluate(split='test')
-                            self.log.add_scalar('test_loss', test_loss, self.global_step)
-                            self.log.add_scalar('test_acc', test_acc, self.global_step)
-                            if test_acc > best_test_acc:
-                                print('[Runner] - Saving new best model on: ', 'test')
-                                self.save_model(save_best='best_test')
-                                torch.cuda.empty_cache()
-                                best_test_acc = test_acc
+                    # evaluate and save the best
+                    if self.global_step % int(self.config['eval_step']) == 0:
+                        print(f'[Runner] - Evaluating on development set')
+                        def evaluate(split):
+                            eval_loss, eval_metric = self.evaluate(split=split)
+                            self.log.add_scalar(f'{split}_loss', eval_loss, self.global_step)
+                            self.log.add_scalar(f'{split}_metric', eval_metric, self.global_step)
+                            if eval_metric > best_metrics[split]:
+                                best_metrics[split] = eval_metric
+                                print('[Runner] - Saving new best model')
+                                self.save_model(save_best='best_dev')
+                        if self.dataloader['dev'] is not None: evaluate('dev')
+                        if self.dataloader['test'] is not None: evaluate('test')
 
                 except RuntimeError as e:
-                    if 'CUDA out of memory' in str(e):
-                        print('[Runner] - CUDA out of memory at step: ', self.global_step)
-                    elif 'worker' in str(e):
-                        print('[Runner] - Dataloader worker not available at step: ', self.global_step)
-                    else:
-                        raise
-                    torch.cuda.empty_cache()
+                    if not 'CUDA out of memory' in str(e): raise
+                    print('[Runner] - CUDA out of memory at step: ', self.global_step)
                     self.optimizer.zero_grad()
+                    torch.cuda.empty_cache()
 
                 pbar.update(1)
                 self.global_step += 1
-                
+
+        if self.dataloader['dev'] is not None: evaluate('dev')
+        if self.dataloader['test'] is not None: evaluate('test')
+
         pbar.close()
         self.log.close()
 
 
     def evaluate(self, split):
-        ''' Testing of downstream tasks'''
-
+        torch.cuda.empty_cache()
         self.upstream_model.eval()
         self.downstream_model.eval()
         
-        valid_count = 0
-        correct_count = 0
-        loss_sum = 0
-        all_logits = []
-
+        loses = 0
+        metrics = 0
         oom_counter = 0
-        for features, labels in tqdm(self.dataloader[split], desc="Iteration"):
+        for wavs in tqdm(self.dataloader[split], desc="Iteration"):
+            wavs = torch.randn(2, 2, 160000)
             with torch.no_grad():
                 try:
-                    # features: (1, batch_size, seq_len, feature)
-                    # dimension of labels depend on task and dataset, but the first dimention is always trivial due to bucketing, eg. (1, ...)
-                    features = features.squeeze(0).to(device=self.device, dtype=torch.float32)
-                    features = self.upstream_model(features)
-
-                    # Since zero padding technique, some timestamps of features are not valid
-                    # For each timestamps, we mark 1 on valid timestamps, and 0 otherwise
-                    # This variable can be useful for frame-wise metric, like phoneme recognition or speaker verification
-                    # label_mask: (batch_size, seq_len), LongTensor
-                    labels = labels.squeeze(0).to(device=self.device)
-                    label_mask = (features.sum(dim=-1) != 0).type(torch.LongTensor).to(device=self.device, dtype=torch.long)
-                    valid_lengths = label_mask.sum(dim=1)
-
-                    if 'utterance' in self.args.run:
-                        # labels: (batch_size, )
-                        loss, logits, correct, valid = self.downstream_model(features, labels, valid_lengths)
-                    else:
-                        # labels: (batch_size, seq_len)
-                        loss, logits, correct, valid = self.downstream_model(features, labels, label_mask)
-                    
-                    loss_sum += loss.detach().cpu().item()
-                    all_logits.append(logits)
-                    correct_count += correct.item()
-                    valid_count += valid.item()
+                    wavs = wavs.to(device=self.device)
+                    feats_for_upstream, linear_inp, phase_inp, linear_tar, phase_tar = self.preprocessor(wavs)
+                    features = self.upstream_model(feats_for_upstream)
+                    label_mask = (features.sum(dim=-1) != 0).long()
+                    loss, metric = self.downstream_model(features, linear_tar, label_mask)
+                    loses += loss.item()
+                    metrics += metric
 
                 except RuntimeError as e:
-                    if 'CUDA out of memory' in str(e):
-                        if oom_counter >= 10: 
-                            oom_counter = 0
-                            break
-                        else:
-                            oom_counter += 1
-                        print(f'[Runner] - CUDA out of memory during {split}ing, aborting after ' + str(10 - oom_counter) + ' more tries...')
-                        torch.cuda.empty_cache()
-                    else:
-                        raise
-
-        average_loss = loss_sum / len(self.dataloader[split])
-        eval_acc = correct_count * 1.0 / valid_count
-        print(f'[Runner] - {split} result: loss {average_loss}, acc {eval_acc}')
+                    if not 'CUDA out of memory' in str(e): raise
+                    if oom_counter >= OOM_RETRY_LIMIT: 
+                        oom_counter = 0
+                        break
+                    oom_counter += 1
+                    print(f'[Runner] - CUDA out of memory during testing {split} set, aborting after ' + str(10 - oom_counter) + ' more tries')
+                    torch.cuda.empty_cache()
+        
+        n_sample = len(self.dataloader[split])
+        average_loss = loses / n_sample
+        average_metric = metrics / n_sample
+        print(f'[Runner] - {split} result: loss {average_loss}, metric {average_metric}')
         
         self.upstream_model.train()
         self.downstream_model.train()
+        torch.cuda.empty_cache()
 
-        return average_loss, eval_acc, all_logits
+        return average_loss, average_metric
