@@ -6,6 +6,8 @@ from tqdm import tqdm
 from torch.optim import Adam
 from tensorboardX import SummaryWriter
 from downstream.solver import get_optimizer
+from evaluation import pesq_eval, stoi_eval, estoi_eval
+from objective import Stoi, Estoi, SI_SDR
 
 OOM_RETRY_LIMIT = 10
 METRIC_NUM = 3
@@ -27,7 +29,18 @@ class Runner():
         self.downstream_model = downstream.to(self.device)
         self.grad_clip = self.config['gradient_clipping']
         self.expdir = expdir
+        self.criterion = None
 
+        if self.config['loss'] == "SI_SDR":
+            self.criterion = SI_SDR()
+
+        elif self.config['loss'] == "SI_SDR":
+            self.criterion = Stoi(self.device)
+
+        elif self.config['loss'] == "SI_SDR":
+            self.criterion = Estoi(self.device)
+
+        assert self.criterion is not None
 
     def set_model(self):
         if self.args.fine_tune:
@@ -105,7 +118,7 @@ class Runner():
                     # This is useful for frame-wise loss computation
 
                     predicted = self.downstream_model(features)
-                    loss = predicted.sum()
+                    loss = self.criterion(src = predicted, tar = linear_tar)
                     loss.backward()
                     loss_sum += loss.item()
 
@@ -184,9 +197,17 @@ class Runner():
                     label_mask = (features.sum(dim=-1) != 0).long()
                     
                     predicted = self.downstream_model(features)
-                    loss = (predicted - linear_tar).norm().sum()
-                    metrics = torch.ones(METRIC_NUM)
 
+                    
+                    metrics = torch.zeros(METRIC_NUM)
+                    # here should be a istft process
+                    # for i in range(predicted.shape[0]):
+                    #     metrics[0] = stoi_eval(src = predicted[i],  tar = linear_tar[i])
+                    #     metrics[1] = estoi_eval(src = predicted[i],  tar = linear_tar[i])
+                    #     metrics[2] = pesq_eval(src = predicted[i],  tar = linear_tar[i])
+
+                    loss = self.criterion(src = predicted,  tar = linear_tar)
+                    
                     loss_sum += loss
                     metrics_sum += metrics
 

@@ -13,9 +13,9 @@ from dataloader import OnlinePreprocessor
 from transformer.nn_transformer import TRANSFORMER
 from downstream.model import dummy_upstream
 from runner import Runner
-from model import PseudoDownstream
+from model import LSTM, Linear
 from dataset import PseudoDataset
-
+from objective import Stoi, Estoi, SI_SDR
 
 def get_downstream_args():
     parser = argparse.ArgumentParser(description='Argument Parser for Downstream Tasks of the S3PLR project.')
@@ -29,6 +29,7 @@ def get_downstream_args():
     parser.add_argument('--weighted_sum', action='store_true', help='Whether to use weighted sum on the transformer model with downstream task.', required=False)
 
     # Options
+    parser.add_argument('--downstream', choices=['LSTM', 'Linear'], default='LSTM', help='Whether to use upstream models for speech representation or fine-tune.', required=False)
     parser.add_argument('--config', default='config/downstream.yaml', type=str, help='Path to downstream experiment config.', required=False)
     parser.add_argument('--expdir', default='result', type=str, help='Path to store experiment result, if empty then default is used.', required=False)
     parser.add_argument('--seed', default=1337, type=int, help='Random seed for reproducable results.', required=False)
@@ -109,7 +110,10 @@ def get_dataloader(args, dataloader_config):
 
 def get_downstream_model(args, input_dim, output_dim, config):
     device = 'cpu' if args.cpu else 'cuda'
-    model = PseudoDownstream(input_dim, output_dim).to(device=device)
+    if args.downstream == 'LSTM':
+        model = LSTM(input_dim, output_dim).to(device=device) 
+    elif args.downstream == 'Linear':
+        model = Linear(input_dim, output_dim).to(device=device)    
     return model
 
 
