@@ -23,7 +23,7 @@ def get_downstream_args():
     parser.add_argument('--dataset', required=True, choices=['dns'])
 
     # upstream settings
-    parser.add_argument('--upstream', choices=['transformer', 'apc', 'baseline'], default='baseline', help='Whether to use upstream models for speech representation or fine-tune.', required=False)
+    parser.add_argument('--upstream', choices=['transformer', 'baseline'], default='baseline', help='Whether to use upstream models for speech representation or fine-tune.', required=False)
     parser.add_argument('--ckpt', default='', type=str, help='Path to upstream pre-trained checkpoint, required if using other than baseline', required=False)
     parser.add_argument('--fine_tune', action='store_true', help='Whether to fine tune the transformer model with downstream task.', required=False)
     parser.add_argument('--weighted_sum', action='store_true', help='Whether to use weighted sum on the transformer model with downstream task.', required=False)
@@ -92,8 +92,6 @@ def get_upstream_model(args, input_dim):
         upstream_model.permute_input = False
     elif args.upstream == 'baseline':
         upstream_model = dummy_upstream(input_dim)
-    else:
-        raise NotImplementedError
 
     assert(hasattr(upstream_model, 'forward'))
     assert(hasattr(upstream_model, 'out_dim'))
