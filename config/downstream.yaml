@@ -1,11 +1,17 @@
 dataloader:
   n_jobs: 6                                             # Subprocess used for torch Dataloader
   batch_size: 6                                         # training batch size, 12 for pre-train, 6 for cpc exp
-    
+
+preprocessor:
+  input_channel: 0
+  target_channel: 1
+  
+  # feat_type: complx, linear, phase, mel, mfcc
   baseline:
-    feat_type: mfcc
-    delta: 2
-    cmvn: True
+    feat_type: linear
+    log: False
+    delta: 0
+    cmvn: False
 
 runner:
   learning_rate: "4e-3"                                 # Learning rate for opt: ['4e-3' for fine-tune, '4e-3' for regualr downstream task training]

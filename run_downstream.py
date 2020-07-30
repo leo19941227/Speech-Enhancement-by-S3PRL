@@ -20,16 +20,16 @@ from dataset import PseudoDataset
 def get_downstream_args():
     parser = argparse.ArgumentParser(description='Argument Parser for Downstream Tasks of the S3PLR project.')
     parser.add_argument('--name', required=True, type=str, help='Name of current experiment.')
+    parser.add_argument('--dataset', required=True, choices=['dns'])
 
     # upstream settings
-    parser.add_argument('--ckpt', default='', type=str, help='Path to upstream pre-trained checkpoint, required if using other than baseline', required=False)
     parser.add_argument('--upstream', choices=['transformer', 'apc', 'baseline'], default='baseline', help='Whether to use upstream models for speech representation or fine-tune.', required=False)
+    parser.add_argument('--ckpt', default='', type=str, help='Path to upstream pre-trained checkpoint, required if using other than baseline', required=False)
     parser.add_argument('--fine_tune', action='store_true', help='Whether to fine tune the transformer model with downstream task.', required=False)
     parser.add_argument('--weighted_sum', action='store_true', help='Whether to use weighted sum on the transformer model with downstream task.', required=False)
-    
+
     # Options
     parser.add_argument('--config', default='config/downstream.yaml', type=str, help='Path to downstream experiment config.', required=False)
-    parser.add_argument('--phone_set', choices=['cpc_phone', 'montreal_phone'], default='cpc_phone', help='Phone set for phone classification tasks', required=False)
     parser.add_argument('--expdir', default='result', type=str, help='Path to store experiment result, if empty then default is used.', required=False)
     parser.add_argument('--seed', default=1337, type=int, help='Random seed for reproducable results.', required=False)
     parser.add_argument('--cpu', action='store_true', help='Disable GPU training.')
@@ -49,9 +49,10 @@ def get_preprocessor(args, config):
     if args.upstream == 'transformer':
         upstream_feat = pretrain_config['online']['input']
     elif args.upstream == 'baseline':
-        upstream_feat = config['dataloader']['baseline']
+        upstream_feat = config['preprocessor']['baseline']
     
-    channel_inp, channel_tar = 0, 1
+    channel_inp = config['preprocessor']['input_channel']
+    channel_tar = config['preprocessor']['target_channel']
     upstream_feat['channel'] = channel_inp
     
     feat_list = [
@@ -63,7 +64,12 @@ def get_preprocessor(args, config):
     ]
 
     device = 'cpu' if args.cpu else 'cuda'
-    return OnlinePreprocessor(**pretrain_config, feat_list=feat_list).to(device=device)
+    preprocessor = OnlinePreprocessor(**pretrain_config, feat_list=feat_list).to(device=device)
+    setattr(preprocessor, 'channel_inp', channel_inp)
+    setattr(preprocessor, 'channel_tar', channel_tar)
+    
+    upstream_feat, inp_linear, inp_phase, tar_linear, tar_phase = preprocessor()
+    return preprocessor, upstream_feat.size(-1), tar_linear.size(-1)
 
 
 def get_upstream_model(args, input_dim):
@@ -99,9 +105,9 @@ def get_dataloader(args, dataloader_config):
     return train_loader, dev_loader, test_loader
 
 
-def get_downstream_model(args, input_dim, class_num, config):
+def get_downstream_model(args, input_dim, output_dim, config):
     device = 'cpu' if args.cpu else 'cuda'
-    model = PseudoDownstream(input_dim).to(device=device)
+    model = PseudoDownstream(input_dim, output_dim).to(device=device)
     return model
 
 
@@ -128,17 +134,16 @@ def main():
     copyfile(args.config, os.path.join(expdir, args.config.split('/')[-1]))
 
     # get preprocessor
-    preprocessor = get_preprocessor(args, config)
-    feat_dim = preprocessor()[0].size(-1)
+    preprocessor, upstream_feat_dim, tar_linear_dim = get_preprocessor(args, config)
 
     # get upstream model
-    upstream_model = get_upstream_model(args, feat_dim)
+    upstream_model = get_upstream_model(args, upstream_feat_dim)
 
     # get dataloaders
     train_loader, dev_loader, test_loader = get_dataloader(args, config['dataloader'])
 
     # get downstream model
-    downstream_model = get_downstream_model(args, upstream_model.out_dim, feat_dim, config)
+    downstream_model = get_downstream_model(args, upstream_model.out_dim, tar_linear_dim, config)
 
     # train
     runner = Runner(args=args,

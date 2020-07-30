@@ -8,6 +8,7 @@ from tensorboardX import SummaryWriter
 from downstream.solver import get_optimizer
 
 OOM_RETRY_LIMIT = 10
+METRIC_NUM = 3
 
 class Runner():
     ''' Handler for complete training and evaluation progress of downstream models '''
@@ -72,10 +73,9 @@ class Runner():
     def train(self):
         total_steps = int(self.config['epochs'] * len(self.dataloader['train']))
         pbar = tqdm(total=total_steps)
-        best_metrics = {'dev': 0, 'test': 0}
         
-        loses = 0
-        metrics = 0
+        loss_sum = 0
+        metrics_best = {'dev': torch.zeros(METRIC_NUM), 'test': torch.zeros(METRIC_NUM)}
         while self.global_step <= total_steps:
             for wavs in self.dataloader['train']:
                 # wavs: (batch_size, channel, max_len)
@@ -84,6 +84,9 @@ class Runner():
                         break
                     
                     wavs = wavs.to(device=self.device)
+                    wav_inp = wavs[:, self.preprocessor.channel_inp, :]
+                    wav_tar = wavs[:, self.preprocessor.channel_tar, :]
+                    
                     feats_for_upstream, linear_inp, phase_inp, linear_tar, phase_tar = self.preprocessor(wavs)
                     # all features are already in CUDA and in shape: (batch_size, max_time, feat_dim)
                     # For reconstruction waveform from linear spectrogram ((power=2)) and phase, use the following:
@@ -101,10 +104,10 @@ class Runner():
                     # For each timestamps, we mark 1 on valid timestamps, and 0 otherwise
                     # This is useful for frame-wise loss computation
 
-                    loss, metric = self.downstream_model(features, linear_tar, label_mask)
+                    predicted = self.downstream_model(features)
+                    loss = predicted.sum()
                     loss.backward()
-                    loses += loss.item()
-                    metrics += metric
+                    loss_sum += loss.item()
 
                     # gradient clipping
                     up_paras = list(self.upstream_model.parameters())
@@ -120,24 +123,27 @@ class Runner():
 
                     # log
                     if self.global_step % int(self.config['log_step']) == 0:
-                        los = loses / self.config['log_step']
-                        self.log.add_scalar('loss', los, self.global_step)
-                        self.log.add_scalar('metric', metrics / self.config['log_step'], self.global_step)
+                        loss_avg = loss_sum / self.config['log_step']
+                        self.log.add_scalar('loss', loss_avg, self.global_step)
                         self.log.add_scalar('gradient norm', grad_norm, self.global_step)
-                        pbar.set_description('Loss %.5f' % (los))
+                        pbar.set_description('Loss %.5f' % (loss_avg))
                         loses = 0
 
                     # evaluate and save the best
                     if self.global_step % int(self.config['eval_step']) == 0:
                         print(f'[Runner] - Evaluating on development set')
                         def evaluate(split):
-                            eval_loss, eval_metric = self.evaluate(split=split)
-                            self.log.add_scalar(f'{split}_loss', eval_loss, self.global_step)
-                            self.log.add_scalar(f'{split}_metric', eval_metric, self.global_step)
-                            if eval_metric > best_metrics[split]:
-                                best_metrics[split] = eval_metric
+                            loss, metrics = self.evaluate(split=split)
+                            self.log.add_scalar(f'{split}_loss', loss.item(), self.global_step)
+                            self.log.add_scalar(f'{split}_stoi', metrics[0].item(), self.global_step)
+                            self.log.add_scalar(f'{split}_estoi', metrics[1].item(), self.global_step)
+                            self.log.add_scalar(f'{split}_pesq', metrics[2].item(), self.global_step)
+
+                            if (metrics > metrics_best[split]).sum() > 0:
+                                metrics_best[split] = torch.max(metrics, metrics_best[split])
                                 print('[Runner] - Saving new best model')
-                                self.save_model(save_best='best_dev')
+                                self.save_model(save_best=f'best_{split}')
+
                         if self.dataloader['dev'] is not None: evaluate('dev')
                         if self.dataloader['test'] is not None: evaluate('test')
 
@@ -162,20 +168,27 @@ class Runner():
         self.upstream_model.eval()
         self.downstream_model.eval()
         
-        loses = 0
-        metrics = 0
+        loss_sum = 0
         oom_counter = 0
+        metrics_sum = torch.zeros(METRIC_NUM)
         for wavs in tqdm(self.dataloader[split], desc="Iteration"):
             wavs = torch.randn(2, 2, 160000)
             with torch.no_grad():
                 try:
                     wavs = wavs.to(device=self.device)
+                    wav_inp = wavs[:, self.preprocessor.channel_inp, :]
+                    wav_tar = wavs[:, self.preprocessor.channel_tar, :]
+
                     feats_for_upstream, linear_inp, phase_inp, linear_tar, phase_tar = self.preprocessor(wavs)
                     features = self.upstream_model(feats_for_upstream)
                     label_mask = (features.sum(dim=-1) != 0).long()
-                    loss, metric = self.downstream_model(features, linear_tar, label_mask)
-                    loses += loss.item()
-                    metrics += metric
+                    
+                    predicted = self.downstream_model(features)
+                    loss = (predicted - linear_tar).norm().sum()
+                    metrics = torch.ones(METRIC_NUM)
+
+                    loss_sum += loss
+                    metrics_sum += metrics
 
                 except RuntimeError as e:
                     if not 'CUDA out of memory' in str(e): raise
@@ -187,12 +200,12 @@ class Runner():
                     torch.cuda.empty_cache()
         
         n_sample = len(self.dataloader[split])
-        average_loss = loses / n_sample
-        average_metric = metrics / n_sample
-        print(f'[Runner] - {split} result: loss {average_loss}, metric {average_metric}')
+        loss_avg = loss_sum / n_sample
+        metrics_avg = metrics_sum / n_sample
+        print(f'[Runner] - {split} result: loss {loss_avg}, metrics {metrics_avg}')
         
         self.upstream_model.train()
         self.downstream_model.train()
         torch.cuda.empty_cache()
 
-        return average_loss, average_metric
+        return loss_avg, metrics_avg
