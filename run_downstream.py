@@ -45,7 +45,11 @@ def get_downstream_args():
 def get_preprocessor(args, config):
     # load the same preprocessor as pretraining stage
     # can also be used for extracting baseline feature (for fair comparison)
-    pretrain_config = torch.load(args.ckpt, map_location='cpu')['Settings']['Config']
+    if args.ckpt != '':
+        pretrain_config = torch.load(args.ckpt, map_location='cpu')['Settings']['Config']
+    else:
+        pretrain_config = yaml.load(open('config/pretrain_sample.yaml', 'r'), Loader=yaml.FullLoader)
+
     if args.upstream == 'transformer':
         upstream_feat = pretrain_config['online']['input']
     elif args.upstream == 'baseline':
