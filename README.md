@@ -1,3 +1,6 @@
+# Speech Enhancement by Self-supervised Audio Transformer
+The repository is co-authored by Chi-Chang Lee and Shu-wen Yang
+
 ### Set workspace
 ```
 export WORKSPACE=/home/leo
