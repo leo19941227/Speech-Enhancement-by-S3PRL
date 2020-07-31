@@ -2,15 +2,16 @@ import os
 import math
 import torch
 import random
+import numpy as np
 from tqdm import tqdm
 from torch.optim import Adam
 from tensorboardX import SummaryWriter
 from downstream.solver import get_optimizer
 from evaluation import pesq_eval, stoi_eval, estoi_eval
 from objective import Stoi, Estoi, SI_SDR
+from joblib import Parallel, delayed
 
 OOM_RETRY_LIMIT = 10
-METRIC_NUM = 3
 
 class Runner():
     ''' Handler for complete training and evaluation progress of downstream models '''
@@ -29,6 +30,7 @@ class Runner():
         self.downstream_model = downstream.to(self.device)
         self.grad_clip = self.config['gradient_clipping']
         self.expdir = expdir
+        self.metrics = [eval(f'{m}_eval') for m in runner_config['metrics']]
         self.criterion = None
 
         if self.config['loss'] == 'si_sdr':
@@ -40,6 +42,7 @@ class Runner():
         elif self.config['loss'] == 'estoi':
             self.criterion = Estoi(self.device)
 
+        assert self.metrics is not None
         assert self.criterion is not None
 
     def set_model(self):
@@ -88,7 +91,7 @@ class Runner():
         pbar = tqdm(total=total_steps)
         
         loss_sum = 0
-        metrics_best = {'dev': torch.zeros(METRIC_NUM), 'test': torch.zeros(METRIC_NUM)}
+        metrics_best = {'dev': torch.zeros(len(self.metrics)), 'test': torch.zeros(len(self.metrics))}
         while self.global_step <= total_steps:
             for wavs in self.dataloader['train']:
                 # wavs: (batch_size, channel, max_len)
@@ -183,33 +186,46 @@ class Runner():
         
         loss_sum = 0
         oom_counter = 0
-        metrics_sum = torch.zeros(METRIC_NUM)
+        scores_sum = torch.zeros(len(self.metrics))
         for wavs in tqdm(self.dataloader[split], desc="Iteration"):
-            wavs = torch.randn(2, 2, 160000)
             with torch.no_grad():
                 try:
                     wavs = wavs.to(device=self.device)
                     wav_inp = wavs[:, self.preprocessor.channel_inp, :]
                     wav_tar = wavs[:, self.preprocessor.channel_tar, :]
+                    # wav: (batch_size, time)
 
                     feats_for_upstream, linear_inp, phase_inp, linear_tar, phase_tar = self.preprocessor(wavs)
                     features = self.upstream_model(feats_for_upstream)
                     label_mask = (features.sum(dim=-1) != 0).long()
                     
                     predicted = self.downstream_model(features)
-
-                    
-                    metrics = torch.zeros(METRIC_NUM)
-                    # here should be a istft process
-                    # for i in range(predicted.shape[0]):
-                    #     metrics[0] = stoi_eval(src = predicted[i],  tar = linear_tar[i])
-                    #     metrics[1] = estoi_eval(src = predicted[i],  tar = linear_tar[i])
-                    #     metrics[2] = pesq_eval(src = predicted[i],  tar = linear_tar[i])
-
                     loss = self.criterion(src = predicted,  tar = linear_tar)
-                    
                     loss_sum += loss
-                    metrics_sum += metrics
+
+                    wav_predicted = self.preprocessor.istft(predicted, phase_inp).cpu().numpy()
+                    wav_tar = wav_tar.cpu().numpy()
+
+                    # split batch into list of utterances
+                    batch_size = len(wav_predicted)
+                    wav_predicted = np.split(wav_predicted, batch_size)
+                    wav_tar = np.split(wav_tar, batch_size)
+
+                    # duplicate list
+                    wav_predicted *= len(self.metrics)
+                    wav_tar *= len(self.metrics)
+                    
+                    # prepare metric function for each utterance in the duplicated list
+                    ones = torch.ones(batch_size).long()
+                    metric_ids = torch.cat([ones * i for i in range(len(self.metrics))], dim=0)
+                    metric_fns = [self.metrics[idx.item()] for idx in metric_ids]
+                    
+                    def calculate_metric(predicted, target, metric_fn):
+                        return metric_fn(predicted.squeeze(), target.squeeze())
+                    scores = Parallel(n_jobs=self.args.n_jobs)(delayed(calculate_metric)(p, t, f) for p, t, f in zip(wav_predicted, wav_tar, metric_fns))
+                    
+                    scores = torch.FloatTensor(scores).view(len(self.metrics), batch_size).mean(dim=1)
+                    scores_sum += scores
 
                 except RuntimeError as e:
                     if not 'CUDA out of memory' in str(e): raise
@@ -222,11 +238,11 @@ class Runner():
         
         n_sample = len(self.dataloader[split])
         loss_avg = loss_sum / n_sample
-        metrics_avg = metrics_sum / n_sample
-        print(f'[Runner] - {split} result: loss {loss_avg}, metrics {metrics_avg}')
+        scores_avg = scores_sum / n_sample
+        print(f'[Runner] - {split} result: loss {loss_avg}, metrics {scores_avg}')
         
         self.upstream_model.train()
         self.downstream_model.train()
         torch.cuda.empty_cache()
 
-        return loss_avg, metrics_avg
+        return loss_avg, scores_avg
