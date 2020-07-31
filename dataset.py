@@ -54,7 +54,7 @@ class NoisyCleanDataset(Dataset):
         noisy_pth = noisy_pths[0]
        
         clean, sr1 = torchaudio.load(clean_pth)
-        noisy, sr2 = torchaudio.load(clean_pth)
+        noisy, sr2 = torchaudio.load(noisy_pth)
         assert sr1 == sr2
         
         return torch.stack([noisy, clean], dim=-1).view(-1, 2)
