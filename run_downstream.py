@@ -9,29 +9,32 @@ import argparse
 import numpy as np
 from shutil import copyfile
 from torch.utils.data import DataLoader
+from torch.nn.utils.rnn import pad_sequence
 from dataloader import OnlinePreprocessor
 from transformer.nn_transformer import TRANSFORMER
 from downstream.model import dummy_upstream
 from runner import Runner
 from model import LSTM, Linear
-from dataset import PseudoDataset
+from dataset import PseudoDataset, NoisyCleanDataset
 
 
 def get_downstream_args():
     parser = argparse.ArgumentParser(description='Argument Parser for Downstream Tasks of the S3PLR project.')
-    parser.add_argument('--name', required=True, type=str, help='Name of current experiment.')
-    parser.add_argument('--dataset', required=True, choices=['dns'])
+    parser.add_argument('--name', required=True, help='Name of current experiment.')
+    parser.add_argument('--trainset', default='')
+    parser.add_argument('--testset', default='')
+    parser.add_argument('--n_jobs', default=12, type=int)
 
     # upstream settings
     parser.add_argument('--upstream', choices=['transformer', 'baseline'], default='baseline', help='Whether to use upstream models for speech representation or fine-tune.', required=False)
-    parser.add_argument('--ckpt', default='', type=str, help='Path to upstream pre-trained checkpoint, required if using other than baseline', required=False)
+    parser.add_argument('--ckpt', default='', help='Path to upstream pre-trained checkpoint, required if using other than baseline', required=False)
     parser.add_argument('--fine_tune', action='store_true', help='Whether to fine tune the transformer model with downstream task.', required=False)
     parser.add_argument('--weighted_sum', action='store_true', help='Whether to use weighted sum on the transformer model with downstream task.', required=False)
 
     # Options
     parser.add_argument('--downstream', choices=['LSTM', 'Linear'], default='LSTM', help='Whether to use upstream models for speech representation or fine-tune.', required=False)
-    parser.add_argument('--config', default='config/downstream.yaml', type=str, help='Path to downstream experiment config.', required=False)
-    parser.add_argument('--expdir', default='result', type=str, help='Path to store experiment result, if empty then default is used.', required=False)
+    parser.add_argument('--config', default='config/downstream.yaml', help='Path to downstream experiment config.', required=False)
+    parser.add_argument('--expdir', default='result', help='Path to store experiment result, if empty then default is used.', required=False)
     parser.add_argument('--seed', default=1337, type=int, help='Random seed for reproducable results.', required=False)
     parser.add_argument('--cpu', action='store_true', help='Disable GPU training.')
 
@@ -99,12 +102,29 @@ def get_upstream_model(args, input_dim):
     return upstream_model
 
 
-def get_dataloader(args, dataloader_config):
-    dataset = PseudoDataset()
-    dataloader = DataLoader(dataset, batch_size=dataloader_config['batch_size'])
-    train_loader = dataloader
-    dev_loader = copy.deepcopy(dataloader)
-    test_loader = copy.deepcopy(dataloader)
+def get_dataloader(args, config):
+    channel_inp = config['preprocessor']['input_channel']
+    channel_tar = config['preprocessor']['target_channel']
+    if args.trainset != '' and args.testset != '':
+        train_set = NoisyCleanDataset(config['dataset'][args.trainset], channel_inp, channel_tar, 0.8, True, args.seed)
+        dev_set = NoisyCleanDataset(config['dataset'][args.trainset], channel_inp, channel_tar, 0.8, False, args.seed)
+        test_set = NoisyCleanDataset(config['dataset'][args.testset], channel_inp, channel_tar, 1.0, True, args.seed)
+    else:
+        train_set = PseudoDataset()
+        dev_set = copy.deepcopy(train_set)
+        test_set = copy.deepcopy(train_set)
+
+    def collate_fn(samples):
+        # samples: [(seq_len, channel), ...]
+        samples = pad_sequence(samples, batch_first=True)
+        # samples: (batch_size, max_len, channel)
+        return samples.transpose(-1, -2).contiguous()
+        # return: (batch_size, channel, max_len)
+
+    dlconf = config['dataloader']
+    train_loader = DataLoader(train_set, batch_size=dlconf['batch_size'], shuffle=True, num_workers=args.n_jobs, collate_fn=collate_fn)
+    dev_loader = DataLoader(dev_set, batch_size=dlconf['eval_batch_size'], num_workers=args.n_jobs, collate_fn=collate_fn)
+    test_loader = DataLoader(test_set, batch_size=dlconf['eval_batch_size'], num_workers=args.n_jobs, collate_fn=collate_fn)
     return train_loader, dev_loader, test_loader
 
 
@@ -146,7 +166,7 @@ def main():
     upstream_model = get_upstream_model(args, upstream_feat_dim)
 
     # get dataloaders
-    train_loader, dev_loader, test_loader = get_dataloader(args, config['dataloader'])
+    train_loader, dev_loader, test_loader = get_dataloader(args, config)
 
     # get downstream model
     downstream_model = get_downstream_model(args, upstream_model.out_dim, tar_linear_dim, config)

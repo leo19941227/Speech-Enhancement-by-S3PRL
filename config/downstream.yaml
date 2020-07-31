@@ -1,6 +1,6 @@
 dataloader:
-  n_jobs: 6                                             # Subprocess used for torch Dataloader
   batch_size: 6                                         # training batch size, 12 for pre-train, 6 for cpc exp
+  eval_batch_size: 12
 
 preprocessor:
   input_channel: 0
@@ -22,3 +22,12 @@ runner:
   eval_step: 100                                         # evaluate every this amount of training steps
   max_keep: 3                                           # maximum number of model ckpt to keep during training
   loss: si_sdr                                        # Scale-Invariant Signal Distortion Ratio
+
+dataset:
+  dns: [
+    '/home/leo/d/speech-enhancement/DNS-Challenge/',
+  ]
+  dns_test: [
+    '/home/leo/d/speech-enhancement/DNS-Challenge/datasets/test_set/synthetic/no_reverb/',
+  ]
+    
