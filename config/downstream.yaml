@@ -14,11 +14,11 @@ preprocessor:
     cmvn: False
 
 runner:
-  learning_rate: "4e-3"                                 # Learning rate for opt: ['4e-3' for fine-tune, '4e-3' for regualr downstream task training]
+  learning_rate: 4.0e-3                                 # Learning rate for opt: ['4e-3' for fine-tune, '4e-3' for regualr downstream task training]
   warmup_proportion: 0.07                               # Proportion of training to perform linear rate warmup.
   gradient_clipping: 1.0                                # Maximum gradient norm
   epochs: 1                                            # total steps for training, a step is a batch of update
   log_step: 10                                          # log training status every this amount of training steps
   eval_step: 100                                         # evaluate every this amount of training steps
   max_keep: 3                                           # maximum number of model ckpt to keep during training
-  loss: "SI_SDR"                                        # Scale-Invariant Signal Distortion Ratio
+  loss: si_sdr                                        # Scale-Invariant Signal Distortion Ratio

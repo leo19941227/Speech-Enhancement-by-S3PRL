@@ -31,13 +31,13 @@ class Runner():
         self.expdir = expdir
         self.criterion = None
 
-        if self.config['loss'] == "SI_SDR":
+        if self.config['loss'] == 'si_sdr':
             self.criterion = SI_SDR()
 
-        elif self.config['loss'] == "SI_SDR":
+        elif self.config['loss'] == 'stoi':
             self.criterion = Stoi(self.device)
 
-        elif self.config['loss'] == "SI_SDR":
+        elif self.config['loss'] == 'estoi':
             self.criterion = Estoi(self.device)
 
         assert self.criterion is not None
