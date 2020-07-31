@@ -35,12 +35,12 @@ class Runner():
 
         if self.config['loss'] == 'si_sdr':
             self.criterion = SI_SDR()
-
         elif self.config['loss'] == 'stoi':
             self.criterion = Stoi(self.device)
-
         elif self.config['loss'] == 'estoi':
             self.criterion = Estoi(self.device)
+        elif self.config['loss'] == 'l1':
+            self.criterion = torch.nn.L1Loss()
 
         assert self.metrics is not None
         assert self.criterion is not None
@@ -121,7 +121,7 @@ class Runner():
                     # This is useful for frame-wise loss computation
 
                     predicted = self.downstream_model(features)
-                    loss = self.criterion(src = predicted, tar = linear_tar)
+                    loss = self.criterion(predicted, linear_tar)
                     loss.backward()
                     loss_sum += loss.item()
 
@@ -200,7 +200,7 @@ class Runner():
                     label_mask = (features.sum(dim=-1) != 0).long()
                     
                     predicted = self.downstream_model(features)
-                    loss = self.criterion(src = predicted,  tar = linear_tar)
+                    loss = self.criterion(predicted, linear_tar)
                     loss_sum += loss
 
                     wav_predicted = self.preprocessor.istft(predicted, phase_inp).cpu().numpy()
