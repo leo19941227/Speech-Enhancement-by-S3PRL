@@ -143,7 +143,7 @@ class Runner():
                         self.log.add_scalar('loss', loss_avg, self.global_step)
                         self.log.add_scalar('gradient norm', grad_norm, self.global_step)
                         pbar.set_description('Loss %.5f' % (loss_avg))
-                        loses = 0
+                        loss_sum = 0
 
                     # evaluate and save the best
                     if self.global_step % int(self.config['eval_step']) == 0:
