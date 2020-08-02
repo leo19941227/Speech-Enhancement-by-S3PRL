@@ -134,7 +134,10 @@ class Runner():
                         grad_norm = torch.nn.utils.clip_grad_norm_(down_paras, self.grad_clip)
 
                     # update parameters
-                    self.optimizer.step()
+                    if math.isnan(grad_norm) or math.isinf(grad_norm):
+                        print('[Runner] - Error : grad norm is nan/inf at step ' + str(self.global_step))
+                    else:
+                        self.optimizer.step()
                     self.optimizer.zero_grad()
 
                     # log
