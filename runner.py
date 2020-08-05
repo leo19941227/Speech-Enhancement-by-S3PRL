@@ -7,7 +7,7 @@ from tqdm import tqdm
 from torch.optim import Adam
 from tensorboardX import SummaryWriter
 from downstream.solver import get_optimizer
-from evaluation import pesq_eval, stoi_eval, estoi_eval
+from evaluation import *
 from objective import Stoi, Estoi, SI_SDR
 from joblib import Parallel, delayed
 
@@ -154,9 +154,8 @@ class Runner():
                         def evaluate(split):
                             loss, metrics = self.evaluate(split=split)
                             self.log.add_scalar(f'{split}_loss', loss.item(), self.global_step)
-                            self.log.add_scalar(f'{split}_stoi', metrics[0].item(), self.global_step)
-                            self.log.add_scalar(f'{split}_estoi', metrics[1].item(), self.global_step)
-                            self.log.add_scalar(f'{split}_pesq', metrics[2].item(), self.global_step)
+                            for i, metric_name in enumerate(self.config['metrics']):
+                                self.log.add_scalar(f'{split}_{metric_name}', metrics[i].item(), self.global_step)
 
                             if (metrics > metrics_best[split]).sum() > 0:
                                 metrics_best[split] = torch.max(metrics, metrics_best[split])
