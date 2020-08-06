@@ -21,8 +21,8 @@ from dataset import PseudoDataset, NoisyCleanDataset
 def get_downstream_args():
     parser = argparse.ArgumentParser(description='Argument Parser for Downstream Tasks of the S3PLR project.')
     parser.add_argument('--name', required=True, help='Name of current experiment.')
-    parser.add_argument('--trainset', default='')
-    parser.add_argument('--testset', default='')
+    parser.add_argument('--trainset', default='dns')
+    parser.add_argument('--testset', default='dns_test')
     parser.add_argument('--n_jobs', default=12, type=int)
 
     # upstream settings
