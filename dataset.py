@@ -1,6 +1,7 @@
 import os
 import re
 import glob
+import copy
 import random
 import torch
 import torchaudio
@@ -66,3 +67,15 @@ class NoisyCleanDataset(Dataset):
 
     def __len__(self):
         return len(self.clean_pths)
+
+    def get_subset(self, ratio=0.2, sample_seed=None):
+        subset = copy.deepcopy(self)
+        clean_pths = sorted(subset.clean_pths)
+        subset_num = round(len(clean_pths) * ratio)
+        if sample_seed is None:
+            clean_pths = clean_pths[:subset_num]
+        else:
+            random.seed(sample_seed)
+            clean_pths = random.sample(clean_pths, subset_num)
+        subset.clean_pths = clean_pths
+        return subset

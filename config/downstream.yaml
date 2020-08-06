@@ -22,7 +22,10 @@ runner:
   eval_step: 3600                                         # evaluate every this amount of training steps
   max_keep: 10                                           # maximum number of model ckpt to keep during training
   loss: si_sdr                                        # Scale-Invariant Signal Distortion Ratio
-  metrics: [stoi, estoi, pesq_nb, pesq_wb]
+  eval_splits: ['subtrain', 'dev', 'test']
+  eval_metrics: [stoi, estoi, pesq_nb, pesq_wb]
+  eval_train_subset_ratio: 0.1
+  eval_log_wavs_num: 5
 
 dataset:
   dns: [

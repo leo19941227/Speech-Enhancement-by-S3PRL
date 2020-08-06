@@ -122,10 +122,14 @@ def get_dataloader(args, config):
         # return: (batch_size, channel, max_len)
 
     dlconf = config['dataloader']
+    # dataloader for training
     train_loader = DataLoader(train_set, batch_size=dlconf['batch_size'], shuffle=True, num_workers=args.n_jobs, collate_fn=collate_fn)
+    # dataloader for evaluation
+    subtrain_loader = DataLoader(train_set.get_subset(config['runner']['eval_train_subset_ratio']),
+                                 batch_size=dlconf['eval_batch_size'], num_workers=args.n_jobs, collate_fn=collate_fn)
     dev_loader = DataLoader(dev_set, batch_size=dlconf['eval_batch_size'], num_workers=args.n_jobs, collate_fn=collate_fn)
     test_loader = DataLoader(test_set, batch_size=dlconf['eval_batch_size'], num_workers=args.n_jobs, collate_fn=collate_fn)
-    return train_loader, dev_loader, test_loader
+    return train_loader, subtrain_loader, dev_loader, test_loader
 
 
 def get_downstream_model(args, input_dim, output_dim, config):
@@ -166,7 +170,7 @@ def main():
     upstream_model = get_upstream_model(args, upstream_feat_dim)
 
     # get dataloaders
-    train_loader, dev_loader, test_loader = get_dataloader(args, config)
+    train_loader, *eval_loaders = get_dataloader(args, config)
 
     # get downstream model
     downstream_model = get_downstream_model(args, upstream_model.out_dim, tar_linear_dim, config)
@@ -174,13 +178,12 @@ def main():
     # train
     runner = Runner(args=args,
                     runner_config=config['runner'],
-                    dataloader= {'train':train_loader, 'dev':dev_loader, 'test':test_loader},
                     preprocessor=preprocessor,
                     upstream=upstream_model,
                     downstream=downstream_model,
                     expdir=expdir)
     runner.set_model()
-    runner.train()
+    runner.train(train_loader, *eval_loaders)
 
 
 if __name__ == '__main__':
