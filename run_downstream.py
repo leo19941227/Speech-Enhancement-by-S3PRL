@@ -106,9 +106,9 @@ def get_dataloader(args, config):
     channel_inp = config['preprocessor']['input_channel']
     channel_tar = config['preprocessor']['target_channel']
     if args.trainset != '' and args.testset != '':
-        train_set = NoisyCleanDataset(config['dataset'][args.trainset], channel_inp, channel_tar, 0.9, True, args.seed)
-        dev_set = NoisyCleanDataset(config['dataset'][args.trainset], channel_inp, channel_tar, 0.9, False, args.seed)
-        test_set = NoisyCleanDataset(config['dataset'][args.testset], channel_inp, channel_tar, 1.0, True, args.seed)
+        train_set = NoisyCleanDataset(config['dataset'][args.trainset], channel_inp, channel_tar, args.seed, 0.9, True)
+        dev_set = NoisyCleanDataset(config['dataset'][args.trainset], channel_inp, channel_tar, args.seed, 0.9, False)
+        test_set = NoisyCleanDataset(config['dataset'][args.testset], channel_inp, channel_tar, None)
     else:
         train_set = PseudoDataset()
         dev_set = copy.deepcopy(train_set)

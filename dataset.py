@@ -24,17 +24,21 @@ class NoisyCleanDataset(Dataset):
     # This dataset identify the clean/noisy pair by the regex pattern in the filename
     # Each directory in roots should contain two sub-directories: clean & noisy
     # eg. The noisy file 'root/noisy/fileid_0.wav' has the label of the clean file 'root/clean/fileid_0.wav'
-    def __init__(self, roots, noisy_channel=0, clean_channel=1, ratio=0.8, select_sampled=True, seed=1337, regex='fileid_\d+'):
+    def __init__(self, roots, noisy_channel=0, clean_channel=1, sample_seed=None, sample_ratio=0.8, select_sampled=True, regex='fileid_\d+'):
         clean_pths = []
         for root in roots:
             clean_pths.extend(find_files(os.path.join(root, 'clean')))
+        clean_pths = sorted(clean_pths)
 
-        random.seed(seed)
-        sampled = random.sample(clean_pths, round(len(clean_pths) * ratio))
-        if select_sampled:
-            self.clean_pths = sampled
+        if sample_seed is None:
+            self.clean_pths = clean_pths
         else:
-            self.clean_pths = [pth for pth in clean_pths if pth not in sampled]
+            random.seed(sample_seed)
+            sampled = random.sample(clean_pths, round(len(clean_pths) * sample_ratio))
+            if select_sampled:
+                self.clean_pths = sampled
+            else:
+                self.clean_pths = [pth for pth in clean_pths if pth not in sampled]
         assert len(self.clean_pths) > 0
 
         self.noisy_channel = noisy_channel
