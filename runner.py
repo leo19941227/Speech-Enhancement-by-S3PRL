@@ -89,8 +89,10 @@ class Runner():
         pbar = tqdm(total=total_steps)
 
         variables = locals()
+        eval_splits = self.config['eval_splits']
+        eval_metrics = self.config['eval_metrics']
         eval_settings = [(split_name, eval(f'{split_name}loader', None, variables), torch.zeros(len(self.metrics)))
-                        for split_name in self.config['eval_splits']]
+                          for split_name in eval_splits]
         # eval_settings: [(split_name, split_loader, split_current_best_metrics), ...]
         
         def eval_and_log():
@@ -98,16 +100,16 @@ class Runner():
                 if split_loader is None:
                     continue
                 print(f'[Runner] - Evaluating on {split_name} set')
-                loss, metrics, *eval_wavs = self.evaluate(split_loader)
+                loss, scores, *eval_wavs = self.evaluate(split_loader)
                 self.log.add_scalar(f'{split_name}_loss', loss.item(), self.global_step)
-                for metric, metric_name in zip(metrics, self.config['eval_metrics']):
-                    self.log.add_scalar(f'{split_name}_{metric_name}', metric.item(), self.global_step)
+                for score, metric_name in zip(scores, eval_metrics):
+                    self.log.add_scalar(f'{split_name}_{metric_name}', score.item(), self.global_step)
                 for idx, wavs in enumerate(zip(*eval_wavs)):
                     for tag, wav in zip(['noisy', 'clean', 'enhanced'], wavs):
                         self.log.add_audio(f'{split_name}-{tag}-{idx}', wav.reshape(-1, 1), global_step=self.global_step,
-                                                          sample_rate=self.preprocessor._sample_rate)
-                if (metrics > metrics_best).sum() > 0:
-                    metrics_best.data = torch.max(metrics, metrics_best).data
+                                           sample_rate=self.preprocessor._sample_rate)
+                if (scores > metrics_best).sum() > 0:
+                    metrics_best.data = torch.max(scores, metrics_best).data
                     self.save_model(save_best=f'best_{split_name}')
         
         # start training
