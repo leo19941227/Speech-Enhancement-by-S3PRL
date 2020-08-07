@@ -13,12 +13,12 @@ class Linear(nn.Module):
 
 
 class LSTM(nn.Module):
-    def __init__(self, input_size=201, hidden_size=201, num_layers=3, bidirectional=False):
+    def __init__(self, input_size=201, output_size=201, hidden_size=201, num_layers=3, bidirectional=False):
         super(LSTM, self).__init__()
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size,
                             num_layers=num_layers, batch_first=True, bidirectional=bidirectional)
         self.scaling_layer = nn.Sequential(
-            nn.Linear(hidden_size, input_size), nn.ReLU())
+            nn.Linear(hidden_size, output_size), nn.ReLU())
         self.init_weights()
         self.bidirectional = bidirectional
 
