@@ -26,7 +26,7 @@ class NoisyCleanDataset(Dataset):
     # Each directory in roots should contain two sub-directories: clean & noisy
     # eg. The noisy file 'root/noisy/fileid_0.wav' has the label of the clean file 'root/clean/fileid_0.wav'
     def __init__(self, roots, noisy_channel=0, clean_channel=1, sample_seed=None, sample_ratio=0.8,
-                 select_sampled=True, regex='fileid_\d+', max_msec=10000):
+                 select_sampled=True, regex='fileid_\d+', max_sec=10.0):
         clean_pths = []
         for root in roots:
             clean_pths.extend(find_files(os.path.join(root, 'clean')))
@@ -46,7 +46,7 @@ class NoisyCleanDataset(Dataset):
         self.noisy_channel = noisy_channel
         self.clean_channel = clean_channel
         self.regex_searcher = re.compile(regex)
-        self.max_msec = max_msec
+        self.max_sec = max_sec
 
     def __getitem__(self, idx):
         clean_pth = self.clean_pths[idx]
@@ -65,10 +65,11 @@ class NoisyCleanDataset(Dataset):
         assert sr1 == sr2
         assert clean.size(-1) == noisy.size(-1)
 
-        if clean.size(-1) > self.max_msec:
-            start = random.randint(0, clean.size(-1) - self.max_msec - 1)
-            clean = clean[:, start:start + self.max_msec]
-            noisy = noisy[:, start:start + self.max_msec]
+        max_length = round(self.max_sec * sr1)
+        if clean.size(-1) > max_length:
+            start = random.randint(0, clean.size(-1) - max_length - 1)
+            clean = clean[:, start:start + max_length]
+            noisy = noisy[:, start:start + max_length]
         
         return torch.stack([noisy, clean], dim=-1).view(-1, 2)
         # return: (time, 2)
