@@ -22,13 +22,13 @@ runner:
   eval_step: 3600                                         # evaluate every this amount of training steps
   max_keep: 10                                           # maximum number of model ckpt to keep during training
   loss: si_sdr                                        # Scale-Invariant Signal Distortion Ratio
-  metrics: [stoi, estoi, pesq]
+  metrics: [stoi, estoi, pesq_nb, pesq_wb]
 
 dataset:
   dns: [
-    '/home/leo/d/speech-enhancement/DNS-Challenge/',
+    './DNS-Challenge/',
   ]
   dns_test: [
-    '/home/leo/d/speech-enhancement/DNS-Challenge/datasets/test_set/synthetic/no_reverb/',
+    './DNS-Challenge/datasets/test_set/synthetic/no_reverb/',
   ]
     
