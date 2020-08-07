@@ -12,7 +12,7 @@ from objective import Stoi, Estoi, SI_SDR, L1
 from joblib import Parallel, delayed
 
 OOM_RETRY_LIMIT = 10
-MAX_FEAT_LEN = 3000
+MAX_FEAT_LEN = 5000
 
 class Runner():
     ''' Handler for complete training and evaluation progress of downstream models '''
@@ -60,13 +60,6 @@ class Runner():
         
         self.downstream_model.train()
 
-    def _get_length_masks(self, lengths):
-        # lengths: (batch_size, ) in cuda
-        stft_lengths = lengths // self.preprocessor._win_args['hop_length'] + 1
-        ascending = self.ascending[:stft_lengths.max().item()].unsqueeze(0).expand(len(lengths), -1)
-        length_masks = (ascending < stft_lengths.unsqueeze(-1)).long()
-        return length_masks
-
     def save_model(self, name='states', save_best=None):
         all_states = {
             'Upstream': self.upstream_model.state_dict() if self.args.fine_tune else None,
@@ -91,6 +84,13 @@ class Runner():
         if len(self.model_kept) >= int(self.config['max_keep']):
             os.remove(self.model_kept[0])
             self.model_kept.pop(0)
+
+    def _get_length_masks(self, lengths):
+        # lengths: (batch_size, ) in cuda
+        stft_lengths = lengths // self.preprocessor._win_args['hop_length'] + 1
+        ascending = self.ascending[:stft_lengths.max().item()].unsqueeze(0).expand(len(lengths), -1)
+        length_masks = (ascending < stft_lengths.unsqueeze(-1)).long()
+        return length_masks
 
     def train(self, trainloader, subtrainloader=None, devloader=None, testloader=None):
         total_steps = int(self.config['epochs'] * len(trainloader))
