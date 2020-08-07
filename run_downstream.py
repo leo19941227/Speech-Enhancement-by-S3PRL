@@ -160,7 +160,7 @@ def main():
     torch.backends.cudnn.benchmark = True
 
     # make experiment directory
-    expdir = os.path.join(f'result/{args.name}')
+    expdir = os.path.join(f'{args.expdir}/{args.name}')
     if not os.path.exists(expdir):
         os.makedirs(expdir)
     copyfile(args.config, os.path.join(expdir, args.config.split('/')[-1]))
