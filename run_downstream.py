@@ -115,9 +115,9 @@ def get_dataloader(args, config):
         test_set = copy.deepcopy(train_set)
 
     def collate_fn(samples):
-        # lengths: record all the length of each utterances in a batch
-        lengths = [len(s) for s in samples]
         # samples: [(seq_len, channel), ...]
+        lengths = [len(s) for s in samples]
+        # lengths: record all the length of each utterances in a batch
         samples = pad_sequence(samples, batch_first=True)
         # samples: (batch_size, max_len, channel)
         return lengths, samples.transpose(-1, -2).contiguous()
