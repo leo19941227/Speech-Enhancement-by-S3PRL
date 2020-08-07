@@ -8,7 +8,7 @@ from torch.optim import Adam
 from tensorboardX import SummaryWriter
 from downstream.solver import get_optimizer
 from evaluation import *
-from objective import Stoi, Estoi, SI_SDR
+from objective import Stoi, Estoi, SI_SDR, L1
 from joblib import Parallel, delayed
 
 OOM_RETRY_LIMIT = 10
@@ -39,7 +39,7 @@ class Runner():
         elif self.config['loss'] == 'estoi':
             self.criterion = Estoi(self.device)
         elif self.config['loss'] == 'l1':
-            self.criterion = torch.nn.L1Loss()
+            self.criterion = L1().to(device=self.device)
 
         assert self.metrics is not None
         assert self.criterion is not None
@@ -58,6 +58,12 @@ class Runner():
         
         self.downstream_model.train()
 
+    def _get_length_masks(self, lengths):
+        # lengths: (batch_size, )
+        stft_lengths = torch.LongTensor(lengths) // self.preprocessor._win_args['hop_length'] + 1
+        ascending = torch.arange(1, stft_lengths.max().item() + 1).unsqueeze(0).expand(len(lengths), -1)
+        length_masks = (ascending <= stft_lengths.unsqueeze(-1)).long()
+        return length_masks
 
     def save_model(self, name='states', save_best=None):
         all_states = {
@@ -135,9 +141,14 @@ class Runner():
                     else:
                         with torch.no_grad():
                             features = self.upstream_model(feats_for_upstream)
+                    # features: (batch_size, max_time, feat_dim)
+
+                    length_masks = self._get_length_masks(lengths).to(device=self.device)
+                    assert length_masks.size(-1) == features.size(-2)
+                    # label_masks: (batch_size, max_time)
 
                     predicted = self.downstream_model(features)
-                    loss = self.criterion(lengths, predicted, linear_tar)
+                    loss = self.criterion(length_masks, predicted, linear_tar)
                     loss.backward()
                     loss_sum += loss.item()
 
@@ -205,10 +216,14 @@ class Runner():
 
                     feats_for_upstream, linear_inp, phase_inp, linear_tar, phase_tar = self.preprocessor(wavs)
                     features = self.upstream_model(feats_for_upstream)
-                    label_mask = (features.sum(dim=-1) != 0).long()
-                    
+                    # features: (batch_size, max_time, feat_dim)
+
+                    length_masks = self._get_length_masks(lengths).to(device=self.device)
+                    assert length_masks.size(-1) == features.size(-2)
+                    # label_masks: (batch_size, max_time)
+
                     predicted = self.downstream_model(features)
-                    loss = self.criterion(lengths, predicted, linear_tar)
+                    loss = self.criterion(length_masks, predicted, linear_tar)
                     loss_sum += loss
 
                     wav_predicted = self.preprocessor.istft(predicted, phase_inp).cpu().numpy()
