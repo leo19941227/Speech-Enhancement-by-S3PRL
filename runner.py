@@ -12,6 +12,7 @@ from objective import Stoi, Estoi, SI_SDR, L1
 from joblib import Parallel, delayed
 
 OOM_RETRY_LIMIT = 10
+MAX_FEAT_LEN = 3000
 
 class Runner():
     ''' Handler for complete training and evaluation progress of downstream models '''
@@ -31,6 +32,7 @@ class Runner():
         self.expdir = expdir
         self.metrics = [eval(f'{m}_eval') for m in runner_config['eval_metrics']]
         self.criterion = None
+        self.ascending = torch.arange(MAX_FEAT_LEN).to(self.device)
 
         if self.config['loss'] == 'si_sdr':
             self.criterion = SI_SDR()
@@ -59,10 +61,10 @@ class Runner():
         self.downstream_model.train()
 
     def _get_length_masks(self, lengths):
-        # lengths: (batch_size, )
-        stft_lengths = torch.LongTensor(lengths) // self.preprocessor._win_args['hop_length'] + 1
-        ascending = torch.arange(1, stft_lengths.max().item() + 1).unsqueeze(0).expand(len(lengths), -1)
-        length_masks = (ascending <= stft_lengths.unsqueeze(-1)).long()
+        # lengths: (batch_size, ) in cuda
+        stft_lengths = lengths // self.preprocessor._win_args['hop_length'] + 1
+        ascending = self.ascending[:stft_lengths.max().item()].unsqueeze(0).expand(len(lengths), -1)
+        length_masks = (ascending < stft_lengths.unsqueeze(-1)).long()
         return length_masks
 
     def save_model(self, name='states', save_best=None):
@@ -143,7 +145,7 @@ class Runner():
                             features = self.upstream_model(feats_for_upstream)
                     # features: (batch_size, max_time, feat_dim)
 
-                    length_masks = self._get_length_masks(lengths).to(device=self.device)
+                    length_masks = self._get_length_masks(torch.LongTensor(lengths).to(device=self.device))
                     assert length_masks.size(-1) == features.size(-2)
                     # label_masks: (batch_size, max_time)
 
@@ -218,7 +220,7 @@ class Runner():
                     features = self.upstream_model(feats_for_upstream)
                     # features: (batch_size, max_time, feat_dim)
 
-                    length_masks = self._get_length_masks(lengths).to(device=self.device)
+                    length_masks = self._get_length_masks(torch.LongTensor(lengths).to(device=self.device))
                     assert length_masks.size(-1) == features.size(-2)
                     # label_masks: (batch_size, max_time)
 
