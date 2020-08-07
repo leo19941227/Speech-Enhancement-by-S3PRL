@@ -15,7 +15,7 @@ OOM_RETRY_LIMIT = 10
 
 class Runner():
     ''' Handler for complete training and evaluation progress of downstream models '''
-    def __init__(self, args, runner_config, dataloader, preprocessor, upstream, downstream, expdir):
+    def __init__(self, args, runner_config, preprocessor, upstream, downstream, expdir):
         self.device = torch.device('cuda') if (args.gpu and torch.cuda.is_available()) else torch.device('cpu')
         if torch.cuda.is_available(): print('[Runner] - CUDA is available!')
         self.model_kept = []
@@ -24,13 +24,12 @@ class Runner():
 
         self.args = args
         self.config = runner_config
-        self.dataloader = dataloader
         self.preprocessor = preprocessor
         self.upstream_model = upstream.to(self.device)
         self.downstream_model = downstream.to(self.device)
         self.grad_clip = self.config['gradient_clipping']
         self.expdir = expdir
-        self.metrics = [eval(f'{m}_eval') for m in runner_config['metrics']]
+        self.metrics = [eval(f'{m}_eval') for m in runner_config['eval_metrics']]
         self.criterion = None
 
         if self.config['loss'] == 'si_sdr':
@@ -85,15 +84,38 @@ class Runner():
             os.remove(self.model_kept[0])
             self.model_kept.pop(0)
 
-
-    def train(self):
-        total_steps = int(self.config['epochs'] * len(self.dataloader['train']))
+    def train(self, trainloader, subtrainloader=None, devloader=None, testloader=None):
+        total_steps = int(self.config['epochs'] * len(trainloader))
         pbar = tqdm(total=total_steps)
+
+        variables = locals()
+        eval_splits = self.config['eval_splits']
+        eval_metrics = self.config['eval_metrics']
+        eval_settings = [(split_name, eval(f'{split_name}loader', None, variables), torch.zeros(len(self.metrics)))
+                          for split_name in eval_splits]
+        # eval_settings: [(split_name, split_loader, split_current_best_metrics), ...]
         
+        def eval_and_log():
+            for split_name, split_loader, metrics_best in eval_settings:
+                if split_loader is None:
+                    continue
+                print(f'[Runner] - Evaluating on {split_name} set')
+                loss, scores, *eval_wavs = self.evaluate(split_loader)
+                self.log.add_scalar(f'{split_name}_loss', loss.item(), self.global_step)
+                for score, metric_name in zip(scores, eval_metrics):
+                    self.log.add_scalar(f'{split_name}_{metric_name}', score.item(), self.global_step)
+                for idx, wavs in enumerate(zip(*eval_wavs)):
+                    for tag, wav in zip(['noisy', 'clean', 'enhanced'], wavs):
+                        self.log.add_audio(f'{split_name}-{tag}-{idx}', wav.reshape(-1, 1), global_step=self.global_step,
+                                           sample_rate=self.preprocessor._sample_rate)
+                if (scores > metrics_best).sum() > 0:
+                    metrics_best.data = torch.max(scores, metrics_best).data
+                    self.save_model(save_best=f'best_{split_name}')
+        
+        # start training
         loss_sum = 0
-        metrics_best = {'dev': torch.zeros(len(self.metrics)), 'test': torch.zeros(len(self.metrics))}
         while self.global_step <= total_steps:
-            for lengths, wavs in self.dataloader['train']:
+            for lengths, wavs in trainloader:
                 # wavs: (batch_size, channel, max_len)
                 try:
                     if self.global_step > total_steps:
@@ -144,20 +166,7 @@ class Runner():
 
                     # evaluate and save the best
                     if self.global_step % int(self.config['eval_step']) == 0:
-                        print(f'[Runner] - Evaluating on development set')
-                        def evaluate(split):
-                            loss, metrics = self.evaluate(split=split)
-                            self.log.add_scalar(f'{split}_loss', loss.item(), self.global_step)
-                            for i, metric_name in enumerate(self.config['metrics']):
-                                self.log.add_scalar(f'{split}_{metric_name}', metrics[i].item(), self.global_step)
-
-                            if (metrics > metrics_best[split]).sum() > 0:
-                                metrics_best[split] = torch.max(metrics, metrics_best[split])
-                                print('[Runner] - Saving new best model')
-                                self.save_model(save_best=f'best_{split}')
-
-                        if self.dataloader['dev'] is not None: evaluate('dev')
-                        if self.dataloader['test'] is not None: evaluate('test')
+                        eval_and_log()
 
                 except RuntimeError as e:
                     if not 'CUDA out of memory' in str(e): raise
@@ -168,22 +177,25 @@ class Runner():
                 pbar.update(1)
                 self.global_step += 1
 
-        if self.dataloader['dev'] is not None: evaluate('dev')
-        if self.dataloader['test'] is not None: evaluate('test')
-
+        eval_and_log()
         pbar.close()
         self.log.close()
 
-
-    def evaluate(self, split):
+    def evaluate(self, dataloader):
         torch.cuda.empty_cache()
         self.upstream_model.eval()
         self.downstream_model.eval()
         
+        data_num = len(dataloader)
+        sampled_wav_num = int(self.config['eval_log_wavs_num'])
+        sample_interval = int(data_num / sampled_wav_num)
+        sample_indices = list(range(0, data_num, sample_interval))[:sampled_wav_num]
+        noisy_wavs, clean_wavs, enhanced_wavs = [], [], []
+
         loss_sum = 0
         oom_counter = 0
         scores_sum = torch.zeros(len(self.metrics))
-        for lengths, wavs in tqdm(self.dataloader[split], desc="Iteration"):
+        for indice, (lengths, wavs) in enumerate(tqdm(dataloader, desc="Iteration")):
             with torch.no_grad():
                 try:
                     wavs = wavs.to(device=self.device)
@@ -225,22 +237,25 @@ class Runner():
                     scores = torch.FloatTensor(scores).view(len(self.metrics), batch_size).mean(dim=1)
                     scores_sum += scores
 
+                    if indice in sample_indices:
+                        noisy_wavs.append(wav_inp[0].detach().cpu())
+                        clean_wavs.append(torch.FloatTensor(wav_tar[0]))
+                        enhanced_wavs.append(torch.FloatTensor(wav_predicted[0]))
+
                 except RuntimeError as e:
                     if not 'CUDA out of memory' in str(e): raise
                     if oom_counter >= OOM_RETRY_LIMIT: 
                         oom_counter = 0
                         break
                     oom_counter += 1
-                    print(f'[Runner] - CUDA out of memory during testing {split} set, aborting after ' + str(10 - oom_counter) + ' more tries')
                     torch.cuda.empty_cache()
         
-        n_sample = len(self.dataloader[split])
+        n_sample = len(dataloader)
         loss_avg = loss_sum / n_sample
         scores_avg = scores_sum / n_sample
-        print(f'[Runner] - {split} result: loss {loss_avg}, metrics {scores_avg}')
         
         self.upstream_model.train()
         self.downstream_model.train()
         torch.cuda.empty_cache()
 
-        return loss_avg, scores_avg
+        return loss_avg, scores_avg, noisy_wavs, clean_wavs, enhanced_wavs

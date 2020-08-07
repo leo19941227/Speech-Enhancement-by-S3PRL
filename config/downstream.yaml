@@ -19,10 +19,13 @@ runner:
   gradient_clipping: 1.0                                # Maximum gradient norm
   epochs: 100                                            # total steps for training, a step is a batch of update
   log_step: 100                                          # log training status every this amount of training steps
-  eval_step: 3600                                         # evaluate every this amount of training steps
+  eval_step: 15000                                         # evaluate every this amount of training steps
   max_keep: 10                                           # maximum number of model ckpt to keep during training
   loss: si_sdr                                        # Scale-Invariant Signal Distortion Ratio
-  metrics: [stoi, estoi, pesq_nb, pesq_wb]
+  eval_splits: ['subtrain', 'dev', 'test']
+  eval_metrics: ['stoi', 'estoi', 'pesq_nb', 'pesq_wb']
+  eval_train_subset_ratio: 0.1
+  eval_log_wavs_num: 5
 
 dataset:
   dns: [
