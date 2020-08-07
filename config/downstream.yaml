@@ -29,9 +29,9 @@ runner:
 
 dataset:
   dns: [
-    './DNS-Challenge/',
+    '../DNS-Challenge/',
   ]
   dns_test: [
-    './DNS-Challenge/datasets/test_set/synthetic/no_reverb/',
+    '../DNS-Challenge/datasets/test_set/synthetic/no_reverb/',
   ]
     

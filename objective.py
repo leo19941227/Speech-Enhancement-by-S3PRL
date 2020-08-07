@@ -359,10 +359,14 @@ class SI_SDR(nn.Module):
         src = src * length_masks.unsqueeze(-1)
         tar = tar * length_masks.unsqueeze(-1)
 
+        src = src.flatten(start_dim=1).contiguous()
+        tar = tar.flatten(start_dim=1).contiguous()
+
         alpha = torch.sum(src * tar, dim=1) / (torch.sum(tar * tar, dim=1) + self.eps)
         ay = alpha.unsqueeze(1) * tar
         norm = torch.sum((ay - src) * (ay - src), dim=1) + self.eps
         loss = -10 * torch.log10(torch.sum(ay * ay, dim=1) / norm + self.eps)
+        
         return loss.mean()
 
 
