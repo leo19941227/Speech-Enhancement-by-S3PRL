@@ -351,10 +351,16 @@ class SI_SDR(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, src, tar):
-        src = src.reshape(-1, src.shape[1] * src.shape[2])
-        tar = tar.reshape(-1, tar.shape[1] * tar.shape[2])
+    def forward(self, lengths, src, tar):
+        hop = int(max(lengths) / src.shape[1])
+        for i in range(src.shape[0]):
+            end = int(lengths[i] / hop)
+            src[:, end:] = 0
+            tar[:, end:] = 0
 
+        src = src.flatten(start_dim=1).contiguous()
+        tar = tar.flatten(start_dim=1).contiguous()
+        
         alpha = torch.sum(src * tar, dim=1) / torch.sum(tar * tar, dim=1)
         ay = alpha.unsqueeze(1) * tar
         norm = torch.sum((ay - src) * (ay - src), dim=1) + EPS

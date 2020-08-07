@@ -21,8 +21,8 @@ from dataset import PseudoDataset, NoisyCleanDataset
 def get_downstream_args():
     parser = argparse.ArgumentParser(description='Argument Parser for Downstream Tasks of the S3PLR project.')
     parser.add_argument('--name', required=True, help='Name of current experiment.')
-    parser.add_argument('--trainset', default='')
-    parser.add_argument('--testset', default='')
+    parser.add_argument('--trainset', default='dns')
+    parser.add_argument('--testset', default='dns_test')
     parser.add_argument('--n_jobs', default=12, type=int)
 
     # upstream settings
@@ -115,10 +115,12 @@ def get_dataloader(args, config):
         test_set = copy.deepcopy(train_set)
 
     def collate_fn(samples):
+        # lengths: record all the length of each utterances in a batch
+        lengths = [len(s) for s in samples]
         # samples: [(seq_len, channel), ...]
         samples = pad_sequence(samples, batch_first=True)
         # samples: (batch_size, max_len, channel)
-        return samples.transpose(-1, -2).contiguous()
+        return lengths, samples.transpose(-1, -2).contiguous()
         # return: (batch_size, channel, max_len)
 
     dlconf = config['dataloader']

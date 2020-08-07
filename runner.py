@@ -93,7 +93,7 @@ class Runner():
         loss_sum = 0
         metrics_best = {'dev': torch.zeros(len(self.metrics)), 'test': torch.zeros(len(self.metrics))}
         while self.global_step <= total_steps:
-            for wavs in self.dataloader['train']:
+            for lengths, wavs in self.dataloader['train']:
                 # wavs: (batch_size, channel, max_len)
                 try:
                     if self.global_step > total_steps:
@@ -114,14 +114,8 @@ class Runner():
                         with torch.no_grad():
                             features = self.upstream_model(feats_for_upstream)
 
-                    label_mask = (features.sum(dim=-1) != 0).long()
-                    # label_mask: (batch_size, seq_len), LongTensor
-                    # Since zero padding, some timestamps of features are not valid
-                    # For each timestamps, we mark 1 on valid timestamps, and 0 otherwise
-                    # This is useful for frame-wise loss computation
-
                     predicted = self.downstream_model(features)
-                    loss = self.criterion(predicted, linear_tar)
+                    loss = self.criterion(lengths, predicted, linear_tar)
                     loss.backward()
                     loss_sum += loss.item()
 
@@ -189,7 +183,7 @@ class Runner():
         loss_sum = 0
         oom_counter = 0
         scores_sum = torch.zeros(len(self.metrics))
-        for wavs in tqdm(self.dataloader[split], desc="Iteration"):
+        for lengths, wavs in tqdm(self.dataloader[split], desc="Iteration"):
             with torch.no_grad():
                 try:
                     wavs = wavs.to(device=self.device)
@@ -202,7 +196,7 @@ class Runner():
                     label_mask = (features.sum(dim=-1) != 0).long()
                     
                     predicted = self.downstream_model(features)
-                    loss = self.criterion(predicted, linear_tar)
+                    loss = self.criterion(lengths, predicted, linear_tar)
                     loss_sum += loss
 
                     wav_predicted = self.preprocessor.istft(predicted, phase_inp).cpu().numpy()
@@ -216,15 +210,17 @@ class Runner():
                     # duplicate list
                     wav_predicted *= len(self.metrics)
                     wav_tar *= len(self.metrics)
-                    
+                    lengths *= len(self.metrics)
+
                     # prepare metric function for each utterance in the duplicated list
                     ones = torch.ones(batch_size).long()
                     metric_ids = torch.cat([ones * i for i in range(len(self.metrics))], dim=0)
                     metric_fns = [self.metrics[idx.item()] for idx in metric_ids]
                     
-                    def calculate_metric(predicted, target, metric_fn):
-                        return metric_fn(predicted.squeeze(), target.squeeze())
-                    scores = Parallel(n_jobs=self.args.n_jobs)(delayed(calculate_metric)(p, t, f) for p, t, f in zip(wav_predicted, wav_tar, metric_fns))
+                    def calculate_metric(length, predicted, target, metric_fn):
+                        return metric_fn(predicted[:, :length].squeeze(), target[:, :length].squeeze())
+                    scores = Parallel(n_jobs=self.args.n_jobs)(delayed(calculate_metric)(l, p, t, f)
+                                      for l, p, t, f in zip(lengths, wav_predicted, wav_tar, metric_fns))
                     
                     scores = torch.FloatTensor(scores).view(len(self.metrics), batch_size).mean(dim=1)
                     scores_sum += scores
