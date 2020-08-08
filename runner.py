@@ -8,6 +8,7 @@ from torch.optim import Adam
 from tensorboardX import SummaryWriter
 from downstream.solver import get_optimizer
 from evaluation import *
+from utils import *
 from objective import Stoi, Estoi, SI_SDR, L1
 from joblib import Parallel, delayed
 
@@ -91,19 +92,6 @@ class Runner():
         ascending = self.ascending[:lengths.max().item()].unsqueeze(0).expand(len(lengths), -1)
         length_masks = (ascending < lengths.unsqueeze(-1)).long()
         return length_masks
-
-    def _masked_mean(self, batch, length_masks, keepdim=False):
-        means = (batch * length_masks).sum(dim=-1, keepdim=True) / (length_masks.sum(dim=-1, keepdim=True) + self.eps)
-        if not keepdim:
-            means = means.squeeze(-1)
-        return means
-
-    def _masked_normalize_decibel(self, audio, reference_audio, length_masks):
-        # audio, reference_audio: (batch_size, max_time)
-        # length_masks: (batch_size, max_time)
-        target_level = 10 * torch.log10(self._masked_mean(reference_audio.pow(2), length_masks, keepdim=True))
-        scalar = (10 ** (target_level / 10)) / (self._masked_mean(audio.pow(2), length_masks, keepdim=True) + self.eps)        
-        return audio * scalar
 
     def train(self, trainloader, subtrainloader=None, devloader=None, testloader=None):
         total_steps = int(self.config['epochs'] * len(trainloader))
@@ -247,7 +235,7 @@ class Runner():
 
                     wav_predicted = self.preprocessor.istft(predicted, phase_inp)
                     length_masks = self._get_length_masks(lengths)
-                    wav_predicted = self._masked_normalize_decibel(wav_predicted, wav_tar, length_masks).cpu().numpy()
+                    wav_predicted = masked_normalize_decibel(wav_predicted, wav_tar, length_masks).cpu().numpy()
                     wav_tar = wav_tar.cpu().numpy()
 
                     # split batch into list of utterances
