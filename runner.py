@@ -115,8 +115,19 @@ class Runner():
                     self.log.add_scalar(f'{split_name}_{metric_name}', score.item(), self.global_step)
                 for idx, wavs in enumerate(zip(*eval_wavs)):
                     for tag, wav in zip(['noisy', 'clean', 'enhanced'], wavs):
-                        self.log.add_audio(f'{split_name}-{tag}-{idx}', wav.reshape(-1, 1), global_step=self.global_step,
+                        marker = f'{split_name}-{tag}-{idx}'
+                        
+                        # log audio
+                        self.log.add_audio(f'{marker}.wav', wav.reshape(-1, 1), global_step=self.global_step,
                                            sample_rate=self.preprocessor._sample_rate)
+
+                        # log spectrogram
+                        feat = {'feat_type': 'linear', 'log': True}
+                        linear = self.preprocessor(wav.reshape(1, 1, -1).to(self.device), [feat])[0]
+                        linear = linear.detach().cpu().squeeze().transpose(0, 1).flip(dims=[0])
+                        fig = plot_spectrogram(linear)
+                        self.log.add_figure(f'{marker}.png', fig, global_step=self.global_step)
+
                 if (scores > metrics_best).sum() > 0:
                     metrics_best.data = torch.max(scores, metrics_best).data
                     self.save_model(save_best=f'best_{split_name}')

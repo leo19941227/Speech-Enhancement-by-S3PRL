@@ -1,4 +1,5 @@
 import torch
+import matplotlib.pyplot as plt
 
 def masked_mean(batch, length_masks, keepdim=False, eps=1e-8):
     # batch: (batch_size, max_time)
@@ -23,3 +24,10 @@ def masked_normalize_decibel(audio, target, length_masks, eps=1e-8):
     scalar_square = (10.0 ** (target.unsqueeze(-1) / 10.0)) / (masked_mean(audio.pow(2), length_masks, keepdim=True) + eps)        
     scalar = scalar_square.pow(0.5)
     return audio * scalar
+
+def plot_spectrogram(spec, height=2):
+    h, w = spec.size(0), spec.size(1)
+    scaling = height / h
+    fig = plt.figure(figsize=(round(w * scaling), round(h * scaling)))
+    plt.imshow(spec)
+    return fig
