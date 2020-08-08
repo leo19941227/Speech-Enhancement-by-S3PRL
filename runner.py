@@ -12,11 +12,11 @@ from objective import Stoi, Estoi, SI_SDR, L1
 from joblib import Parallel, delayed
 
 OOM_RETRY_LIMIT = 10
-MAX_FEAT_LEN = 5000
+MAX_POSITIONS_LEN = 16000 * 50
 
 class Runner():
     ''' Handler for complete training and evaluation progress of downstream models '''
-    def __init__(self, args, runner_config, preprocessor, upstream, downstream, expdir):
+    def __init__(self, args, runner_config, preprocessor, upstream, downstream, expdir, eps=1e-6):
         self.device = torch.device('cuda') if (args.gpu and torch.cuda.is_available()) else torch.device('cpu')
         if torch.cuda.is_available(): print('[Runner] - CUDA is available!')
         self.model_kept = []
@@ -32,7 +32,8 @@ class Runner():
         self.expdir = expdir
         self.metrics = [eval(f'{m}_eval') for m in runner_config['eval_metrics']]
         self.criterion = None
-        self.ascending = torch.arange(MAX_FEAT_LEN).to(self.device)
+        self.ascending = torch.arange(MAX_POSITIONS_LEN).to(self.device)
+        self.eps = eps
 
         if self.config['loss'] == 'si_sdr':
             self.criterion = SI_SDR()
@@ -87,10 +88,25 @@ class Runner():
 
     def _get_length_masks(self, lengths):
         # lengths: (batch_size, ) in cuda
-        stft_lengths = lengths // self.preprocessor._win_args['hop_length'] + 1
-        ascending = self.ascending[:stft_lengths.max().item()].unsqueeze(0).expand(len(lengths), -1)
-        length_masks = (ascending < stft_lengths.unsqueeze(-1)).long()
+        ascending = self.ascending[:lengths.max().item()].unsqueeze(0).expand(len(lengths), -1)
+        length_masks = (ascending < lengths.unsqueeze(-1)).long()
         return length_masks
+
+    def _masked_mean(self, batch, length_masks, keepdim=False):
+        means = (batch * length_masks).sum(dim=-1, keep_dim=True) / (length_masks.sum(dim=-1, keepdim=True) + self.eps)
+        if not keepdim:
+            means = means.squeeze(-1)
+        return means
+
+    def _masked_root_mean_square(self, batch, length_masks, keepdim=False):
+        return self._batch_mean(batch.pow(2), length_masks, keepdim=keepdim).pow(0.5)
+
+    def _masked_normalize_decibel(self, audio, reference_audio, length_masks):
+        # audio, reference_audio: (batch_size, max_time)
+        # length_masks: (batch_size, max_time)
+        target_level = 20 * torch.log10(self._root_mean_square(reference_audio, length_masks))
+        scalar = (10 ** (target_level / 20)) / (self._root_mean_square(audio) + self.eps)        
+        return audio * scalar
 
     def train(self, trainloader, subtrainloader=None, devloader=None, testloader=None):
         total_steps = int(self.config['epochs'] * len(trainloader))
@@ -129,6 +145,7 @@ class Runner():
                     if self.global_step > total_steps:
                         break
                     
+                    lengths = torch.LongTensor(lengths).to(device=self.device)
                     wavs = wavs.to(device=self.device)
                     wav_inp = wavs[:, self.preprocessor.channel_inp, :]
                     wav_tar = wavs[:, self.preprocessor.channel_tar, :]
@@ -145,12 +162,13 @@ class Runner():
                             features = self.upstream_model(feats_for_upstream)
                     # features: (batch_size, max_time, feat_dim)
 
-                    length_masks = self._get_length_masks(torch.LongTensor(lengths).to(device=self.device))
-                    assert length_masks.size(-1) == features.size(-2)
-                    # label_masks: (batch_size, max_time)
+                    stft_lengths = lengths // self.preprocessor._win_args['hop_length'] + 1
+                    stft_length_masks = self._get_length_masks(stft_lengths)
+                    assert stft_length_masks.size(-1) == features.size(-2)
+                    # stft_length_masks: (batch_size, max_time)
 
                     predicted = self.downstream_model(features)
-                    loss = self.criterion(length_masks, predicted, linear_tar)
+                    loss = self.criterion(stft_length_masks, predicted, linear_tar)
                     loss.backward()
                     loss_sum += loss.item()
 
@@ -211,6 +229,7 @@ class Runner():
         for indice, (lengths, wavs) in enumerate(tqdm(dataloader, desc="Iteration")):
             with torch.no_grad():
                 try:
+                    lengths = torch.LongTensor(lengths).to(device=self.device)
                     wavs = wavs.to(device=self.device)
                     wav_inp = wavs[:, self.preprocessor.channel_inp, :]
                     wav_tar = wavs[:, self.preprocessor.channel_tar, :]
@@ -220,15 +239,18 @@ class Runner():
                     features = self.upstream_model(feats_for_upstream)
                     # features: (batch_size, max_time, feat_dim)
 
-                    length_masks = self._get_length_masks(torch.LongTensor(lengths).to(device=self.device))
-                    assert length_masks.size(-1) == features.size(-2)
-                    # label_masks: (batch_size, max_time)
+                    stft_lengths = lengths // self.preprocessor._win_args['hop_length'] + 1
+                    stft_length_masks = self._get_length_masks(stft_lengths)
+                    assert stft_length_masks.size(-1) == features.size(-2)
+                    # stft_length_masks: (batch_size, max_time)
 
                     predicted = self.downstream_model(features)
                     loss = self.criterion(length_masks, predicted, linear_tar)
                     loss_sum += loss
 
-                    wav_predicted = self.preprocessor.istft(predicted, phase_inp).cpu().numpy()
+                    wav_predicted = self.preprocessor.istft(predicted, phase_inp)
+                    length_masks = self._get_length_masks(lengths)
+                    wav_predicted = self._masked_normalize_decibel(wav_predicted, wav_tar, length_masks).cpu().numpy()
                     wav_tar = wav_tar.cpu().numpy()
 
                     # split batch into list of utterances
