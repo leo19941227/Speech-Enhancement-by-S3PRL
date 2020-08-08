@@ -116,7 +116,7 @@ def get_dataloader(args, config):
 
     def collate_fn(samples):
         # samples: [(seq_len, channel), ...]
-        lengths = [len(s) for s in samples]
+        lengths = torch.LongTensor([len(s) for s in samples])
         # lengths: record all the length of each utterances in a batch
         samples = pad_sequence(samples, batch_first=True)
         # samples: (batch_size, max_len, channel)

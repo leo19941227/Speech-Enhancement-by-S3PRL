@@ -93,19 +93,19 @@ class Runner():
         return length_masks
 
     def _masked_mean(self, batch, length_masks, keepdim=False):
-        means = (batch * length_masks).sum(dim=-1, keep_dim=True) / (length_masks.sum(dim=-1, keepdim=True) + self.eps)
+        means = (batch * length_masks).sum(dim=-1, keepdim=True) / (length_masks.sum(dim=-1, keepdim=True) + self.eps)
         if not keepdim:
             means = means.squeeze(-1)
         return means
 
     def _masked_root_mean_square(self, batch, length_masks, keepdim=False):
-        return self._batch_mean(batch.pow(2), length_masks, keepdim=keepdim).pow(0.5)
+        return self._masked_mean(batch.pow(2), length_masks, keepdim=keepdim).pow(0.5)
 
     def _masked_normalize_decibel(self, audio, reference_audio, length_masks):
         # audio, reference_audio: (batch_size, max_time)
         # length_masks: (batch_size, max_time)
-        target_level = 20 * torch.log10(self._root_mean_square(reference_audio, length_masks))
-        scalar = (10 ** (target_level / 20)) / (self._root_mean_square(audio) + self.eps)        
+        target_level = 20 * torch.log10(self._masked_root_mean_square(reference_audio, length_masks, keepdim=True))
+        scalar = (10 ** (target_level / 20)) / (self._masked_root_mean_square(audio, length_masks, keepdim=True) + self.eps)        
         return audio * scalar
 
     def train(self, trainloader, subtrainloader=None, devloader=None, testloader=None):
@@ -145,7 +145,7 @@ class Runner():
                     if self.global_step > total_steps:
                         break
                     
-                    lengths = torch.LongTensor(lengths).to(device=self.device)
+                    lengths = lengths.to(device=self.device)
                     wavs = wavs.to(device=self.device)
                     wav_inp = wavs[:, self.preprocessor.channel_inp, :]
                     wav_tar = wavs[:, self.preprocessor.channel_tar, :]
@@ -229,7 +229,7 @@ class Runner():
         for indice, (lengths, wavs) in enumerate(tqdm(dataloader, desc="Iteration")):
             with torch.no_grad():
                 try:
-                    lengths = torch.LongTensor(lengths).to(device=self.device)
+                    lengths = lengths.to(device=self.device)
                     wavs = wavs.to(device=self.device)
                     wav_inp = wavs[:, self.preprocessor.channel_inp, :]
                     wav_tar = wavs[:, self.preprocessor.channel_tar, :]
@@ -245,7 +245,7 @@ class Runner():
                     # stft_length_masks: (batch_size, max_time)
 
                     predicted = self.downstream_model(features)
-                    loss = self.criterion(length_masks, predicted, linear_tar)
+                    loss = self.criterion(stft_length_masks, predicted, linear_tar)
                     loss_sum += loss
 
                     wav_predicted = self.preprocessor.istft(predicted, phase_inp)
@@ -261,7 +261,7 @@ class Runner():
                     # duplicate list
                     wav_predicted *= len(self.metrics)
                     wav_tar *= len(self.metrics)
-                    lengths *= len(self.metrics)
+                    lengths = lengths.cpu().tolist() * len(self.metrics)
 
                     # prepare metric function for each utterance in the duplicated list
                     ones = torch.ones(batch_size).long()
