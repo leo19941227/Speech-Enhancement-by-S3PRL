@@ -98,14 +98,11 @@ class Runner():
             means = means.squeeze(-1)
         return means
 
-    def _masked_root_mean_square(self, batch, length_masks, keepdim=False):
-        return self._masked_mean(batch.pow(2), length_masks, keepdim=keepdim).pow(0.5)
-
     def _masked_normalize_decibel(self, audio, reference_audio, length_masks):
         # audio, reference_audio: (batch_size, max_time)
         # length_masks: (batch_size, max_time)
-        target_level = 20 * torch.log10(self._masked_root_mean_square(reference_audio, length_masks, keepdim=True))
-        scalar = (10 ** (target_level / 20)) / (self._masked_root_mean_square(audio, length_masks, keepdim=True) + self.eps)        
+        target_level = 10 * torch.log10(self._masked_mean(reference_audio.pow(2), length_masks, keepdim=True))
+        scalar = (10 ** (target_level / 10)) / (self._masked_mean(audio.pow(2), length_masks, keepdim=True) + self.eps)        
         return audio * scalar
 
     def train(self, trainloader, subtrainloader=None, devloader=None, testloader=None):
