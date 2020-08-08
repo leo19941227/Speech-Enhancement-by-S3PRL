@@ -20,5 +20,6 @@ def masked_normalize_decibel(audio, target, length_masks, eps=1e-8):
     assert type(target) is torch.Tensor and target.dim() == 1
     # target: (batch_size, ), each utterance has a target decibel level
 
-    scalar = (10.0 ** (target.unsqueeze(-1) / 10.0)) / (masked_mean(audio.pow(2), length_masks, keepdim=True) + eps)        
+    scalar_square = (10.0 ** (target.unsqueeze(-1) / 10.0)) / (masked_mean(audio.pow(2), length_masks, keepdim=True) + eps)        
+    scalar = scalar_square.pow(0.5)
     return audio * scalar
