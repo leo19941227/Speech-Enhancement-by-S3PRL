@@ -235,36 +235,31 @@ class Runner():
 
                     wav_predicted = self.preprocessor.istft(predicted, phase_inp)
                     length_masks = self._get_length_masks(lengths)
-                    wav_predicted = masked_normalize_decibel(wav_predicted, wav_tar, length_masks).cpu().numpy()
-                    wav_tar = wav_tar.cpu().numpy()
+                    wav_predicted = masked_normalize_decibel(wav_predicted, wav_tar, length_masks)
 
-                    # split batch into list of utterances
+                    # split batch into list of utterances and duplicate N_METRICS times
                     batch_size = len(wav_predicted)
-                    wav_predicted = np.split(wav_predicted, batch_size)
-                    wav_tar = np.split(wav_tar, batch_size)
-
-                    # duplicate list
-                    wav_predicted *= len(self.metrics)
-                    wav_tar *= len(self.metrics)
-                    lengths = lengths.cpu().tolist() * len(self.metrics)
+                    wav_predicted_list = wav_predicted.detach().cpu().chunk(batch_size) * len(self.metrics)
+                    wav_tar_list = wav_tar.detach().cpu().chunk(batch_size) * len(self.metrics)
+                    lengths_list = lengths.detach().cpu().tolist() * len(self.metrics)
 
                     # prepare metric function for each utterance in the duplicated list
-                    ones = torch.ones(batch_size).long()
-                    metric_ids = torch.cat([ones * i for i in range(len(self.metrics))], dim=0)
-                    metric_fns = [self.metrics[idx.item()] for idx in metric_ids]
+                    ones = torch.ones(batch_size).long().unsqueeze(0).expand(len(self.metrics), -1)
+                    metric_ids = ones * torch.arange(len(self.metrics)).unsqueeze(-1)
+                    metric_fns = [self.metrics[idx.item()] for idx in metric_ids.reshape(-1)]
                     
                     def calculate_metric(length, predicted, target, metric_fn):
-                        return metric_fn(predicted[:, :length].squeeze(), target[:, :length].squeeze())
+                        return metric_fn(predicted.squeeze()[:length], target.squeeze()[:length])
                     scores = Parallel(n_jobs=self.args.n_jobs)(delayed(calculate_metric)(l, p, t, f)
-                                      for l, p, t, f in zip(lengths, wav_predicted, wav_tar, metric_fns))
+                                      for l, p, t, f in zip(lengths_list, wav_predicted_list, wav_tar_list, metric_fns))
                     
                     scores = torch.FloatTensor(scores).view(len(self.metrics), batch_size).mean(dim=1)
                     scores_sum += scores
 
                     if indice in sample_indices:
                         noisy_wavs.append(wav_inp[0].detach().cpu())
-                        clean_wavs.append(torch.FloatTensor(wav_tar[0]))
-                        enhanced_wavs.append(torch.FloatTensor(wav_predicted[0]))
+                        clean_wavs.append(wav_tar[0].detach().cpu())
+                        enhanced_wavs.append(wav_predicted[0].detach().cpu())
 
                 except RuntimeError as e:
                     if not 'CUDA out of memory' in str(e): raise
