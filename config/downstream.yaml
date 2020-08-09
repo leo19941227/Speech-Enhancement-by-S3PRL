@@ -35,3 +35,14 @@ dataset:
     './DNS-Challenge/datasets/test_set/synthetic/no_reverb/',
   ]
     
+model:
+  Linear:
+    hidden_size: 256
+  LSTM:
+    hidden_size: 256
+    num_layers: 3
+    bidirectional: False
+  Residual:
+    hidden_size: 256
+    num_layers: 3
+    bidirectional: False
