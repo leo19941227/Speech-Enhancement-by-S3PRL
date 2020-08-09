@@ -72,7 +72,7 @@ def get_preprocessor(args, config):
     ]
 
     device = 'cpu' if args.cpu else 'cuda'
-    preprocessor = OnlinePreprocessor(**pretrain_config, feat_list=feat_list).to(device=device)
+    preprocessor = OnlinePreprocessor(**pretrain_config['online'], feat_list=feat_list).to(device=device)
     setattr(preprocessor, 'channel_inp', channel_inp)
     setattr(preprocessor, 'channel_tar', channel_tar)
     
