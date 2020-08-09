@@ -6,3 +6,5 @@
 **/DNS-Challenge/**
 
 *.ipynb
+*.yaml
+*.sh
