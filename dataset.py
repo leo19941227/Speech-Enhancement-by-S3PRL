@@ -57,7 +57,7 @@ class NoisyCleanDataset(Dataset):
         noisy_pths = glob.glob(f'{noisy_dir}/*{fileid}*')
         file_searcher = re.compile(fileid + '\D')
         noisy_pths = [pth for pth in noisy_pths if file_searcher.search(pth) is not None]
-        assert len(noisy_pths) == 1
+        assert len(noisy_pths) == 1, f'{noisy_pths}'
         noisy_pth = noisy_pths[0]
        
         clean, sr1 = torchaudio.load(clean_pth)
