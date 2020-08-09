@@ -240,7 +240,7 @@ class Runner():
                     assert stft_length_masks.size(-1) == features.size(-2)
                     # stft_length_masks: (batch_size, max_time)
 
-                    predicted = self.downstream_model(features)
+                    predicted = self.downstream_model(features, linears=linear_inp)
                     loss = self.criterion(stft_length_masks, predicted, linear_tar)
                     loss_sum += loss
 
