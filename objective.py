@@ -245,7 +245,7 @@ class Stoi(nn.Module):
         imag_part = spec[:, :, 1]
         return real_part**2 + imag_part**2
 
-    def forward(self, enh, cln):
+    def forward(self, enh, cln, **kwargs):
         x = cln
         y = enh
 
@@ -318,7 +318,7 @@ class Estoi(Stoi):
         x_normed = x_inv.unsqueeze(1) * x_normed
         return x_normed
 
-    def forward(self, enh, cln):
+    def forward(self, enh, cln, **kwargs):
         x = cln
         y = enh
 
@@ -352,7 +352,7 @@ class SI_SDR(nn.Module):
         super().__init__()
         self.eps = eps
 
-    def forward(self, length_masks, src, tar):
+    def forward(self, src, tar, length_masks, **kwargs):
         # length_masks: (batch_size, max_time)
         # src, tar: (batch_size, max_time, feat_dim)
 
@@ -376,7 +376,7 @@ class L1(nn.Module):
         self.eps = eps
         self.fn = torch.nn.L1Loss()
 
-    def forward(self, length_masks, src, tar):
+    def forward(self, src, tar, length_masks, **kwargs):
         # length_masks: (batch_size, max_time)
         # src, tar: (batch_size, max_time, feat_dim)
 

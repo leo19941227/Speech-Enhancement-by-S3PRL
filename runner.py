@@ -164,7 +164,7 @@ class Runner():
                     # stft_length_masks: (batch_size, max_time)
 
                     predicted = self.downstream_model(features, linears=linear_inp)
-                    loss = self.criterion(stft_length_masks, predicted, linear_tar)
+                    loss = self.criterion(predicted, linear_tar, length_masks=stft_length_masks)
                     loss.backward()
                     loss_sum += loss.item()
 
@@ -241,7 +241,7 @@ class Runner():
                     # stft_length_masks: (batch_size, max_time)
 
                     predicted = self.downstream_model(features, linears=linear_inp)
-                    loss = self.criterion(stft_length_masks, predicted, linear_tar)
+                    loss = self.criterion(predicted, linear_tar, length_masks=stft_length_masks)
                     loss_sum += loss
 
                     wav_predicted = self.preprocessor.istft(predicted, phase_inp)
