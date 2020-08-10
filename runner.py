@@ -32,18 +32,10 @@ class Runner():
         self.grad_clip = self.config['gradient_clipping']
         self.expdir = expdir
         self.metrics = [eval(f'{m}_eval') for m in runner_config['eval_metrics']]
-        self.criterion = None
-        self.ascending = torch.arange(MAX_POSITIONS_LEN).to(self.device)
+        loss_name = self.config['loss']
+        self.criterion = eval(f'{loss_name}()').to(device=self.device)
+        self.ascending = torch.arange(MAX_POSITIONS_LEN).to(device=self.device)
         self.eps = eps
-
-        if self.config['loss'] == 'si_sdr':
-            self.criterion = SI_SDR()
-        elif self.config['loss'] == 'stoi':
-            self.criterion = Stoi(self.device)
-        elif self.config['loss'] == 'estoi':
-            self.criterion = Estoi(self.device)
-        elif self.config['loss'] == 'l1':
-            self.criterion = L1().to(device=self.device)
 
         assert self.metrics is not None
         assert self.criterion is not None
