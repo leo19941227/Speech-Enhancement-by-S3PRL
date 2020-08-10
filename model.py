@@ -59,5 +59,5 @@ class Residual(nn.Module):
     def forward(self, features, linears, **kwargs):
         offset, _ = self.lstm(features)
         offset = self.scaling_layer(offset)
-        predicted = linears + offset
+        predicted = linears * offset
         return predicted
