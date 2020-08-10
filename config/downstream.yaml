@@ -42,8 +42,10 @@ model:
     hidden_size: 256
     num_layers: 3
     bidirectional: False
+    activation: ReLU
   Residual:
     hidden_size: 256
     num_layers: 3
     bidirectional: False
+    activation: Sigmoid
     cmvn: True

@@ -13,12 +13,13 @@ class Linear(nn.Module):
 
 
 class LSTM(nn.Module):
-    def __init__(self, input_size=201, output_size=201, hidden_size=201, num_layers=3, bidirectional=False, **kwargs):
+    def __init__(self, input_size=201, output_size=201, hidden_size=201, num_layers=3, bidirectional=False,
+                 activation='Sigmoid', **kwargs):
         super(LSTM, self).__init__()
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size,
                             num_layers=num_layers, batch_first=True, bidirectional=bidirectional)
         self.scaling_layer = nn.Sequential(
-            nn.Linear(hidden_size, output_size), nn.ReLU())
+            nn.Linear(hidden_size, output_size), eval(f'nn.{activation}()'))
         self.init_weights()
         self.bidirectional = bidirectional
 
@@ -39,12 +40,12 @@ class LSTM(nn.Module):
 
 class Residual(nn.Module):
     def __init__(self, input_size=201, output_size=201, hidden_size=201, num_layers=3, bidirectional=False,
-                 cmvn=False, eps=1e-6, **kwargs):
+                 activation='Sigmoid', cmvn=False, eps=1e-6, **kwargs):
         super(Residual, self).__init__()
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size,
                             num_layers=num_layers, batch_first=True, bidirectional=bidirectional)
         self.scaling_layer = nn.Sequential(
-            nn.Linear(hidden_size, output_size), nn.ReLU())
+            nn.Linear(hidden_size, output_size), eval(f'nn.{activation}()'))
         self.init_weights()
         self.bidirectional = bidirectional
         self.cmvn = cmvn
