@@ -7,10 +7,10 @@ from tqdm import tqdm
 from torch.optim import Adam
 from tensorboardX import SummaryWriter
 from downstream.solver import get_optimizer
-from evaluation import *
-from utils import *
-from objective import Stoi, Estoi, SI_SDR, L1
 from joblib import Parallel, delayed
+from evaluation import *
+from objective import *
+from utils import *
 
 OOM_RETRY_LIMIT = 10
 MAX_POSITIONS_LEN = 16000 * 50
@@ -241,7 +241,7 @@ class Runner():
                     # stft_length_masks: (batch_size, max_time)
 
                     predicted = self.downstream_model(features, linears=linear_inp)
-                    loss = self.criterion(predicted, linear_tar, length_masks=stft_length_masks)
+                    loss = self.criterion(predicted, linear_tar, length_masks=stft_length_masks, noisy=linear_inp)
                     loss_sum += loss
 
                     wav_predicted = self.preprocessor.istft(predicted, phase_inp)
