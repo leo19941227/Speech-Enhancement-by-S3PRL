@@ -13,8 +13,8 @@ class SISDR(nn.Module):
         self.eps = eps
 
     def forward(self, predicted, linear_tar, stft_length_masks, **kwargs):
-        # length_masks: (batch_size, max_time)
-        # src, tar: (batch_size, max_time, feat_dim)
+        # stft_length_masks: (batch_size, max_time)
+        # predicted, linear_tar: (batch_size, max_time, feat_dim)
         src = predicted * stft_length_masks.unsqueeze(-1)
         tar = linear_tar * stft_length_masks.unsqueeze(-1)
 
@@ -36,8 +36,8 @@ class L1(nn.Module):
         self.fn = torch.nn.L1Loss()
 
     def forward(self, predicted, linear_tar, stft_length_masks, **kwargs):
-        # length_masks: (batch_size, max_time)
-        # src, tar: (batch_size, max_time, feat_dim)
+        # stft_length_masks: (batch_size, max_time)
+        # predicted, linear_tar: (batch_size, max_time, feat_dim)
 
         src = predicted * stft_length_masks.unsqueeze(-1)
         tar = linear_tar * stft_length_masks.unsqueeze(-1)
