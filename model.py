@@ -9,7 +9,7 @@ class Linear(nn.Module):
 
     def forward(self, features, **kwargs):
         predicted = self.linear(features)
-        return predicted
+        return predicted,
 
 
 class LSTM(nn.Module):
@@ -35,7 +35,7 @@ class LSTM(nn.Module):
     def forward(self, features, **kwargs):
         predicted, _ = self.lstm(features)
         predicted = self.scaling_layer(predicted)
-        return predicted
+        return predicted,
 
 
 class Residual(nn.Module):
@@ -66,4 +66,4 @@ class Residual(nn.Module):
             offset = (offset - offset.mean(dim=1, keepdim=True)) / (offset.std(dim=1, keepdim=True) + self.eps)
         offset = self.scaling_layer(offset)
         predicted = linears * offset
-        return predicted
+        return predicted, offset

@@ -12,12 +12,11 @@ class SISDR(nn.Module):
         super().__init__()
         self.eps = eps
 
-    def forward(self, src, tar, length_masks, **kwargs):
+    def forward(self, predicted, linear_tar, stft_length_masks, **kwargs):
         # length_masks: (batch_size, max_time)
         # src, tar: (batch_size, max_time, feat_dim)
-
-        src = src * length_masks.unsqueeze(-1)
-        tar = tar * length_masks.unsqueeze(-1)
+        src = predicted * stft_length_masks.unsqueeze(-1)
+        tar = linear_tar * stft_length_masks.unsqueeze(-1)
 
         src = src.flatten(start_dim=1).contiguous()
         tar = tar.flatten(start_dim=1).contiguous()
@@ -36,12 +35,12 @@ class L1(nn.Module):
         self.eps = eps
         self.fn = torch.nn.L1Loss()
 
-    def forward(self, src, tar, length_masks, **kwargs):
+    def forward(self, predicted, linear_tar, stft_length_masks, **kwargs):
         # length_masks: (batch_size, max_time)
         # src, tar: (batch_size, max_time, feat_dim)
 
-        src = src * length_masks.unsqueeze(-1)
-        tar = tar * length_masks.unsqueeze(-1)
+        src = predicted * stft_length_masks.unsqueeze(-1)
+        tar = linear_tar * stft_length_masks.unsqueeze(-1)
         l1 = self.fn(src, tar)
         
         return l1

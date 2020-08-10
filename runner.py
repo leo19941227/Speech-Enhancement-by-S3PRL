@@ -155,8 +155,8 @@ class Runner():
                     assert stft_length_masks.size(-1) == features.size(-2)
                     # stft_length_masks: (batch_size, max_time)
 
-                    predicted = self.downstream_model(features, linears=linear_inp)
-                    loss = self.criterion(predicted, linear_tar, length_masks=stft_length_masks)
+                    predicted, *model_results = self.downstream_model(features, linears=linear_inp)
+                    loss = self.criterion(**{k : v for k, v in locals().items() if k != 'self'})
                     loss.backward()
                     loss_sum += loss.item()
 
@@ -232,8 +232,8 @@ class Runner():
                     assert stft_length_masks.size(-1) == features.size(-2)
                     # stft_length_masks: (batch_size, max_time)
 
-                    predicted = self.downstream_model(features, linears=linear_inp)
-                    loss = self.criterion(predicted, linear_tar, length_masks=stft_length_masks, noisy=linear_inp)
+                    predicted, *model_results = self.downstream_model(features, linears=linear_inp)
+                    loss = self.criterion(**{k : v for k, v in locals().items() if k != 'self'})
                     loss_sum += loss
 
                     wav_predicted = self.preprocessor.istft(predicted, phase_inp)
