@@ -22,7 +22,7 @@ runner:
   eval_step: 2000                                         # evaluate every this amount of training steps
   max_keep: 5                                           # maximum number of model ckpt to keep during training
   eval_splits: ['subtrain', 'dev', 'test']
-  eval_metrics: ['stoi', 'pesq_nb']
+  eval_metrics: ['stoi', 'pesq_nb', 'sisdr']
   eval_train_subset_ratio: 0.1
   eval_log_wavs_num: 5
 

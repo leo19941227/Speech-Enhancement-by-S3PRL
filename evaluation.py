@@ -2,6 +2,13 @@ import numpy as np
 from pesq import pesq
 from pystoi import stoi
 
+def sisdr_eval(src, tar, sr=16000, eps=1e-10):
+    alpha = (src * tar).sum() / ((tar * tar).sum() + eps)
+    ay = alpha * tar
+    norm = ((ay - src) * (ay - src)).sum() + eps
+    sisdr = 10 * ((ay * ay).sum() / norm + eps).log10()
+    return sisdr.item()
+
 def pesq_nb_eval(src, tar, sr=16000):
     src, tar = src.numpy(), tar.numpy()
     assert src.ndim == 1 and tar.ndim == 1
