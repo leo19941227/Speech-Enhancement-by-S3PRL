@@ -20,7 +20,9 @@ from dataset import PseudoDataset, NoisyCleanDataset
 
 def get_downstream_args():
     parser = argparse.ArgumentParser(description='Argument Parser for Downstream Tasks of the S3PLR project.')
-    parser.add_argument('--name', required=True, help='Name of current experiment.')
+    parser.add_argument('--resume', help='Specify the downstream checkpoint path for continual training')
+
+    parser.add_argument('--name', help='Name of current experiment.')
     parser.add_argument('--trainset', default='dns')
     parser.add_argument('--testset', default='dns_test')
     parser.add_argument('--n_jobs', default=12, type=int)
@@ -41,8 +43,15 @@ def get_downstream_args():
 
     # parse
     args = parser.parse_args()
-    setattr(args, 'gpu', not args.cpu)
-    config = yaml.load(open(args.config, 'r'), Loader=yaml.FullLoader)
+    if args.resume is not None:
+        resume_ckpt = args.resume
+        ckpt = torch.load(resume_ckpt, map_location='cpu')
+        args = ckpt['Settings']['Paras']
+        config = ckpt['Settings']['Config']
+        setattr(args, 'resume', resume_ckpt)
+    else:
+        setattr(args, 'gpu', not args.cpu)
+        config = yaml.load(open(args.config, 'r'), Loader=yaml.FullLoader)
     
     return args, config
 
@@ -177,7 +186,7 @@ def main():
 
     # train
     runner = Runner(args=args,
-                    runner_config=config['runner'],
+                    config=config,
                     preprocessor=preprocessor,
                     upstream=upstream_model,
                     downstream=downstream_model,

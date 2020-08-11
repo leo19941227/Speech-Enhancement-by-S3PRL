@@ -18,20 +18,21 @@ MAX_POSITIONS_LEN = 16000 * 50
 
 class Runner():
     ''' Handler for complete training and evaluation progress of downstream models '''
-    def __init__(self, args, runner_config, preprocessor, upstream, downstream, expdir, eps=1e-6):
+    def __init__(self, args, config, preprocessor, upstream, downstream, expdir, eps=1e-6):
         self.device = torch.device('cuda') if (args.gpu and torch.cuda.is_available()) else torch.device('cpu')
         if torch.cuda.is_available(): print('[Runner] - CUDA is available!')
         self.global_step = 1
         self.log = SummaryWriter(expdir)
 
         self.args = args
-        self.config = runner_config
+        self.config = config
+        self.rconfig = config['runner']
         self.preprocessor = preprocessor
         self.upstream_model = upstream.to(self.device)
         self.downstream_model = downstream.to(self.device)
-        self.grad_clip = self.config['gradient_clipping']
+        self.grad_clip = self.rconfig['gradient_clipping']
         self.expdir = expdir
-        self.metrics = [eval(f'{m}_eval') for m in runner_config['eval_metrics']]
+        self.metrics = [eval(f'{m}_eval') for m in self.rconfig['eval_metrics']]
         self.criterion = eval(f'{self.args.objective}()').to(device=self.device)
         self.ascending = torch.arange(MAX_POSITIONS_LEN).to(device=self.device)
         self.eps = eps
@@ -44,14 +45,24 @@ class Runner():
             self.upstream_model.train()
             param_optimizer = list(self.upstream_model.named_parameters()) + list(self.downstream_model.named_parameters())
             self.optimizer = get_optimizer(params=param_optimizer,
-                                           lr=float(self.config['learning_rate']), 
-                                           warmup_proportion=float(self.config['warmup_proportion']),
-                                           training_steps=int(self.config['total_steps']))
+                                           lr=float(self.rconfig['learning_rate']), 
+                                           warmup_proportion=float(self.rconfig['warmup_proportion']),
+                                           training_steps=int(self.rconfig['total_steps']))
         else:
             self.upstream_model.eval()
-            self.optimizer = Adam(self.downstream_model.parameters(), lr=float(self.config['learning_rate']), betas=(0.9, 0.999))
+            self.optimizer = Adam(self.downstream_model.parameters(), lr=float(self.rconfig['learning_rate']), betas=(0.9, 0.999))
         
         self.downstream_model.train()
+        if self.args.resume is not None:
+            self.load_model(self.args.resume)
+
+    def load_model(self, ckptpth):
+        ckpt = torch.load(ckptpth)
+        if self.args.fine_tune:
+            self.upstream_model.load_state_dict(ckpt['Upstream'])
+        self.downstream_model.load_state_dict(ckpt['Downstream'])
+        self.optimizer.load_state_dict(ckpt['Optimizer'])
+        self.global_step = ckpt['Global_step'] + 1
 
     def save_model(self, save_type=None):
         all_states = {
@@ -67,9 +78,9 @@ class Runner():
 
         def check_ckpt_num(directory):
             ckpts = glob.glob(f'{directory}/states-*.ckpt')
-            if len(ckpts) >= self.config['max_keep']:
+            if len(ckpts) >= self.rconfig['max_keep']:
                 ckpts = sorted(ckpts, key=lambda pth: int(pth.split('-')[-1].split('.')[0]))
-                for ckpt in ckpts[:len(ckpts) - self.config['max_keep']]:
+                for ckpt in ckpts[:len(ckpts) - self.rconfig['max_keep']]:
                     os.remove(ckpt)
 
         save_dir = self.expdir if save_type is None else f'{self.expdir}/{save_type}'
@@ -85,12 +96,12 @@ class Runner():
         return length_masks
 
     def train(self, trainloader, subtrainloader=None, devloader=None, testloader=None):
-        total_steps = int(self.config['epochs'] * len(trainloader))
+        total_steps = int(self.rconfig['epochs'] * len(trainloader))
         pbar = tqdm(total=total_steps)
 
         variables = locals()
-        eval_splits = self.config['eval_splits']
-        eval_metrics = self.config['eval_metrics']
+        eval_splits = self.rconfig['eval_splits']
+        eval_metrics = self.rconfig['eval_metrics']
         eval_settings = [(split_name, eval(f'{split_name}loader', None, variables), torch.zeros(len(self.metrics)))
                           for split_name in eval_splits]
         # eval_settings: [(split_name, split_loader, split_current_best_metrics), ...]
@@ -175,8 +186,8 @@ class Runner():
                     self.optimizer.zero_grad()
 
                     # log
-                    if self.global_step % int(self.config['log_step']) == 0:
-                        loss_avg = loss_sum / self.config['log_step']
+                    if self.global_step % int(self.rconfig['log_step']) == 0:
+                        loss_avg = loss_sum / self.rconfig['log_step']
                         self.log.add_scalar('loss', loss_avg, self.global_step)
                         self.log.add_scalar('gradient norm', grad_norm, self.global_step)
                         pbar.set_description('Loss %.5f' % (loss_avg))
@@ -187,7 +198,7 @@ class Runner():
                                 results['logger'](self.log, self.global_step)
 
                     # evaluate and save the best
-                    if self.global_step % int(self.config['eval_step']) == 0:
+                    if self.global_step % int(self.rconfig['eval_step']) == 0:
                         eval_and_log()
 
                 except RuntimeError as e:
@@ -209,7 +220,7 @@ class Runner():
         self.downstream_model.eval()
         
         data_num = len(dataloader)
-        sampled_wav_num = int(self.config['eval_log_wavs_num'])
+        sampled_wav_num = int(self.rconfig['eval_log_wavs_num'])
         sample_interval = int(data_num / sampled_wav_num)
         sample_indices = list(range(0, data_num, sample_interval))[:sampled_wav_num]
         noisy_wavs, clean_wavs, enhanced_wavs = [], [], []
