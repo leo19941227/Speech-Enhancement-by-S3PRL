@@ -62,7 +62,7 @@ class Runner():
             self.upstream_model.load_state_dict(ckpt['Upstream'])
         self.downstream_model.load_state_dict(ckpt['Downstream'])
         self.optimizer.load_state_dict(ckpt['Optimizer'])
-        self.global_step = ckpt['Global_step'] + 1
+        self.global_step = ckpt['Global_step']
 
     def save_model(self, save_type=None):
         all_states = {
