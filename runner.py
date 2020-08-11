@@ -158,7 +158,7 @@ class Runner():
                     # stft_length_masks: (batch_size, max_time)
 
                     predicted, model_results = self.downstream_model(features, linears=linear_inp)
-                    loss = self.criterion(**self._noself(locals()), **model_results)
+                    loss, objective_results = self.criterion(**self._noself(locals()), **model_results)
                     loss.backward()
                     loss_sum += loss.item()
 
@@ -184,6 +184,10 @@ class Runner():
                         self.log.add_scalar('gradient norm', grad_norm, self.global_step)
                         pbar.set_description('Loss %.5f' % (loss_avg))
                         loss_sum = 0
+                        
+                        for results in [model_results, objective_results]:
+                            if 'logger' in results:
+                                results['logger'](self.log)
 
                     # evaluate and save the best
                     if self.global_step % int(self.config['eval_step']) == 0:

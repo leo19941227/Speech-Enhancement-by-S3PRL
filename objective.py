@@ -26,7 +26,7 @@ class SISDR(nn.Module):
         norm = torch.sum((ay - src) * (ay - src), dim=1) + self.eps
         loss = -10 * torch.log10(torch.sum(ay * ay, dim=1) / norm + self.eps)
         
-        return loss.mean()
+        return loss.mean(), {}
 
 
 class L1(nn.Module):
@@ -43,7 +43,7 @@ class L1(nn.Module):
         tar = linear_tar * stft_length_masks.unsqueeze(-1)
         l1 = self.fn(src, tar)
         
-        return l1
+        return l1, {}
 
 
 class WSD(nn.Module):
@@ -68,4 +68,4 @@ class WSD(nn.Module):
 
         noise_loss = (G * N * stft_length_masks.unsqueeze(-1)).pow(2).sum(-1).sum(-1).mean()
 
-        return self.alpha * speech_loss + (1 - self.alpha) * noise_loss
+        return self.alpha * speech_loss + (1 - self.alpha) * noise_loss, {}
