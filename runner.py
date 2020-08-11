@@ -67,7 +67,7 @@ class Runner():
 
         def check_ckpt_num(directory):
             ckpts = glob.glob(f'{directory}/states-*.ckpt')
-            if len(ckpts) > self.config['max_keep']:
+            if len(ckpts) >= self.config['max_keep']:
                 ckpts = sorted(ckpts, key=lambda pth: int(pth.split('-')[-1].split('.')[0]))
                 for ckpt in ckpts[:len(ckpts) - self.config['max_keep']]:
                     os.remove(ckpt)
