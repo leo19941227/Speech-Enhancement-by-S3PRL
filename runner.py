@@ -32,8 +32,7 @@ class Runner():
         self.grad_clip = self.config['gradient_clipping']
         self.expdir = expdir
         self.metrics = [eval(f'{m}_eval') for m in runner_config['eval_metrics']]
-        loss_name = self.config['loss']
-        self.criterion = eval(f'{loss_name}()').to(device=self.device)
+        self.criterion = eval(f'{self.args.objective}()').to(device=self.device)
         self.ascending = torch.arange(MAX_POSITIONS_LEN).to(device=self.device)
         self.eps = eps
 

@@ -21,7 +21,6 @@ runner:
   log_step: 100                                          # log training status every this amount of training steps
   eval_step: 15000                                         # evaluate every this amount of training steps
   max_keep: 10                                           # maximum number of model ckpt to keep during training
-  loss: SISDR                                        # Scale-Invariant Signal Distortion Ratio
   eval_splits: ['subtrain', 'dev', 'test']
   eval_metrics: ['stoi', 'estoi', 'pesq_nb', 'pesq_wb']
   eval_train_subset_ratio: 0.1
@@ -34,7 +33,16 @@ dataset:
   dns_test: [
     './DNS-Challenge/datasets/test_set/synthetic/no_reverb/',
   ]
-    
+
+objective:
+  L1:
+    {}
+  SISDR:
+    {}
+  WSD:
+    db_interval: 30
+    alpha: 0.5
+
 model:
   Linear:
     hidden_size: 256
