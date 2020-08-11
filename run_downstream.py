@@ -1,6 +1,7 @@
 import os
 import yaml
 import copy
+import glob
 import torch
 import torchaudio
 import random
@@ -49,7 +50,14 @@ def get_downstream_args():
         setattr(args, 'gpu', not args.cpu)
         config = yaml.load(open(args.config, 'r'), Loader=yaml.FullLoader)
     else:
-        resume_ckpt = args.resume
+        if os.path.isdir(args.resume):
+            ckpts = glob.glob(f'{args.resume}/*.ckpt')
+            assert len(ckpts) > 0
+            ckpts = sorted(ckpts, key=lambda pth: int(pth.split('-')[-1].split('.')[0]))
+            resume_ckpt = ckpts[-1]
+        else:
+            resume_ckpt = args.resume
+
         ckpt = torch.load(resume_ckpt, map_location='cpu')
         args = ckpt['Settings']['Paras']
         config = ckpt['Settings']['Config']
