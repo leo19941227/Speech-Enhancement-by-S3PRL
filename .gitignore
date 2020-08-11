@@ -4,6 +4,7 @@
 **/result/**
 **/config/**
 **/DNS-Challenge/**
+**/wandb/**
 
 *.ipynb
 *.yaml

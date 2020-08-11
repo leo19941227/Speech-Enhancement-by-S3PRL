@@ -5,6 +5,7 @@ import torch
 import torchaudio
 import random
 from functools import partial
+from importlib import import_module
 import argparse
 import numpy as np
 from shutil import copyfile
@@ -40,18 +41,27 @@ def get_downstream_args():
     parser.add_argument('--expdir', default='result', help='Path to store experiment result, if empty then default is used.', required=False)
     parser.add_argument('--seed', default=1337, type=int, help='Random seed for reproducable results.', required=False)
     parser.add_argument('--cpu', action='store_true', help='Disable GPU training.')
+    parser.add_argument('--wandb', action='store_true')
 
     # parse
     args = parser.parse_args()
-    if args.resume is not None:
+    if args.resume is None:
+        setattr(args, 'gpu', not args.cpu)
+        config = yaml.load(open(args.config, 'r'), Loader=yaml.FullLoader)
+    else:
         resume_ckpt = args.resume
         ckpt = torch.load(resume_ckpt, map_location='cpu')
         args = ckpt['Settings']['Paras']
         config = ckpt['Settings']['Config']
         setattr(args, 'resume', resume_ckpt)
-    else:
-        setattr(args, 'gpu', not args.cpu)
-        config = yaml.load(open(args.config, 'r'), Loader=yaml.FullLoader)
+    
+    if args.wandb:
+        wandb = import_module('wandb')
+        wandb.init(name=args.name, sync_tensorboard=True)
+        wandb.config.update({
+            'args': vars(args),
+            'config': config
+        })
     
     return args, config
 
