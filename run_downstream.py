@@ -57,11 +57,15 @@ def get_downstream_args():
     
     if args.wandb:
         wandb = import_module('wandb')
-        wandb.init(name=args.name, sync_tensorboard=True)
-        wandb.config.update({
-            'args': vars(args),
-            'config': config
-        })
+        if args.resume is None:
+            wandb.init(name=args.name, sync_tensorboard=True)
+            setattr(args, 'wandbid', wandb.run.id)
+            wandb.config.update({
+                'args': vars(args),
+                'config': config
+            })
+        else:
+            wandb.init(name=args.name, resume=args.wandbid, sync_tensorboard=True)
     
     return args, config
 
