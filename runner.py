@@ -98,6 +98,7 @@ class Runner():
     def train(self, trainloader, subtrainloader=None, devloader=None, testloader=None):
         total_steps = int(self.rconfig['epochs'] * len(trainloader))
         pbar = tqdm(total=total_steps)
+        pbar.n = self.global_step - 1
 
         variables = locals()
         eval_splits = self.rconfig['eval_splits']
