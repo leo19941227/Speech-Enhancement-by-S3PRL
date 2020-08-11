@@ -96,8 +96,7 @@ class Runner():
         return length_masks
 
     def train(self, trainloader, subtrainloader=None, devloader=None, testloader=None):
-        total_steps = int(self.rconfig['epochs'] * len(trainloader))
-        pbar = tqdm(total=total_steps)
+        pbar = tqdm(total=self.rconfig['total_step'])
         pbar.n = self.global_step - 1
 
         variables = locals()

@@ -17,12 +17,12 @@ runner:
   learning_rate: 4.0e-4                                 # Learning rate for opt: ['4e-3' for fine-tune, '4e-3' for regualr downstream task training]
   warmup_proportion: 0.07                               # Proportion of training to perform linear rate warmup.
   gradient_clipping: 1.0                                # Maximum gradient norm
-  epochs: 100                                            # total steps for training, a step is a batch of update
-  log_step: 100                                          # log training status every this amount of training steps
-  eval_step: 15000                                         # evaluate every this amount of training steps
-  max_keep: 10                                           # maximum number of model ckpt to keep during training
+  total_step: 20000                                            # total steps for training, a step is a batch of update
+  log_step: 1000                                          # log training status every this amount of training steps
+  eval_step: 2000                                         # evaluate every this amount of training steps
+  max_keep: 5                                           # maximum number of model ckpt to keep during training
   eval_splits: ['subtrain', 'dev', 'test']
-  eval_metrics: ['stoi', 'estoi', 'pesq_nb', 'pesq_wb']
+  eval_metrics: ['stoi', 'pesq_nb']
   eval_train_subset_ratio: 0.1
   eval_log_wavs_num: 5
 
