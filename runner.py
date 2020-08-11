@@ -96,7 +96,8 @@ class Runner():
         return length_masks
 
     def train(self, trainloader, subtrainloader=None, devloader=None, testloader=None):
-        pbar = tqdm(total=self.rconfig['total_step'])
+        total_steps = self.rconfig['total_step']
+        pbar = tqdm(total=total_steps)
         pbar.n = self.global_step - 1
 
         variables = locals()
@@ -107,7 +108,6 @@ class Runner():
         # eval_settings: [(split_name, split_loader, split_current_best_metrics), ...]
         
         def eval_and_log():
-            self.save_model()
             for split_name, split_loader, metrics_best in eval_settings:
                 if split_loader is None:
                     continue
@@ -199,6 +199,7 @@ class Runner():
 
                     # evaluate and save the best
                     if self.global_step % int(self.rconfig['eval_step']) == 0:
+                        self.save_model()
                         eval_and_log()
 
                 except RuntimeError as e:
@@ -210,7 +211,6 @@ class Runner():
                 pbar.update(1)
                 self.global_step += 1
 
-        eval_and_log()
         pbar.close()
         self.log.close()
 
