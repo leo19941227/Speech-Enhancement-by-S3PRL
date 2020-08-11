@@ -75,6 +75,6 @@ class WSD(nn.Module):
             log.add_figure('WSD_speech', fig, global_step)
             fig = plot_spectrogram((S * voice_mask)[0].log())
             log.add_figure('WSD_voice_mask', fig, global_step)
-        logger = partial(logger_tmp, **locals())
+        logger = partial(logger_tmp, S=S, voice_mask=voice_mask)
 
         return self.alpha * speech_loss + (1 - self.alpha) * noise_loss, {'logger': logger}
