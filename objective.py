@@ -44,3 +44,28 @@ class L1(nn.Module):
         l1 = self.fn(src, tar)
         
         return l1
+
+
+class WSD(nn.Module):
+    def __init__(self, alpha=0.5, db_interval=30, eps=1e-10):
+        super().__init__()
+        self.db_interval = 30
+        self.alpha = alpha
+        self.eps = eps
+
+    def forward(self, linear_inp, offset, linear_tar, stft_length_masks, **kwargs):
+        device = linear_inp.device
+        S, G = linear_tar, offset
+        N = torch.max(linear_inp - linear_tar, torch.zeros(1).to(device))
+        
+        energy = S.sum(dim=-1, keepdim=True)
+        db_thres = 10 * torch.log10(energy.max()) - self.db_interval
+        voice_mask = (10 * torch.log10(energy)) > db_thres
+
+        speech_diff = (S - (G * S)) * voice_mask * stft_length_masks.unsqueeze(-1)
+        speech_diff_powsum = speech_diff.pow(2).sum(-1).sum(-1)
+        speech_loss =  speech_diff_powsum.mean()
+
+        noise_loss = (G * N * stft_length_masks.unsqueeze(-1)).pow(2).sum(-1).sum(-1).mean()
+
+        return self.alpha * speech_loss + (1 - self.alpha) * noise_loss
