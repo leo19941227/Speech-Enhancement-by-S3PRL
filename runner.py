@@ -118,7 +118,6 @@ class Runner():
                         # log spectrogram
                         feat = {'feat_type': 'linear', 'log': True}
                         linear = self.preprocessor(wav.reshape(1, 1, -1).to(self.device), [feat])[0]
-                        linear = linear.detach().cpu().squeeze().transpose(0, 1).flip(dims=[0])
                         fig = plot_spectrogram(linear)
                         self.log.add_figure(f'{marker}.png', fig, global_step=self.global_step)
 
@@ -187,7 +186,7 @@ class Runner():
                         
                         for results in [model_results, objective_results]:
                             if 'logger' in results:
-                                results['logger'](self.log)
+                                results['logger'](self.log, self.global_step)
 
                     # evaluate and save the best
                     if self.global_step % int(self.config['eval_step']) == 0:
@@ -239,7 +238,7 @@ class Runner():
                     # stft_length_masks: (batch_size, max_time)
 
                     predicted, model_results = self.downstream_model(features, linears=linear_inp)
-                    loss = self.criterion(**self._noself(locals()), **model_results)
+                    loss, _ = self.criterion(**self._noself(locals()), **model_results)
                     loss_sum += loss
 
                     wav_predicted = self.preprocessor.istft(predicted, phase_inp)

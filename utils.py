@@ -38,6 +38,8 @@ def masked_normalize_decibel(audio, target, length_masks, eps=1e-8):
     return audio * scalar
 
 def plot_spectrogram(spec, height=2):
+    spec = spec.detach().cpu().squeeze().transpose(0, 1).flip(dims=[0])
+    assert spec.dim() == 2
     h, w = spec.size(0), spec.size(1)
     scaling = height / h
     fig = plt.figure(figsize=(round(w * scaling), round(h * scaling)))

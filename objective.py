@@ -5,6 +5,8 @@ import numpy as np
 import scipy
 from scipy.signal.windows import hann as hanning
 from torch import Tensor
+from functools import partial
+from utils import *
 
 
 class SISDR(nn.Module):
@@ -60,7 +62,7 @@ class WSD(nn.Module):
         
         energy = S.sum(dim=-1, keepdim=True)
         db_thres = 10 * torch.log10(energy.max()) - self.db_interval
-        voice_mask = (10 * torch.log10(energy)) > db_thres
+        voice_mask = ((10 * torch.log10(energy)) > db_thres).long()
 
         speech_diff = (S - (G * S)) * voice_mask * stft_length_masks.unsqueeze(-1)
         speech_diff_powsum = speech_diff.pow(2).sum(-1).sum(-1)
@@ -68,4 +70,11 @@ class WSD(nn.Module):
 
         noise_loss = (G * N * stft_length_masks.unsqueeze(-1)).pow(2).sum(-1).sum(-1).mean()
 
-        return self.alpha * speech_loss + (1 - self.alpha) * noise_loss, {}
+        def logger_tmp(log, global_step, S, voice_mask, **kwargs):
+            fig = plot_spectrogram(S[0].log())
+            log.add_figure('WSD_speech', fig, global_step)
+            fig = plot_spectrogram((S * voice_mask)[0].log())
+            log.add_figure('WSD_voice_mask', fig, global_step)
+        logger = partial(logger_tmp, **locals())
+
+        return self.alpha * speech_loss + (1 - self.alpha) * noise_loss, {'logger': logger}
