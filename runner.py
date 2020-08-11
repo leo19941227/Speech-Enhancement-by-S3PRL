@@ -1,4 +1,5 @@
 import os
+import glob
 import math
 import torch
 import random
@@ -20,7 +21,6 @@ class Runner():
     def __init__(self, args, runner_config, preprocessor, upstream, downstream, expdir, eps=1e-6):
         self.device = torch.device('cuda') if (args.gpu and torch.cuda.is_available()) else torch.device('cpu')
         if torch.cuda.is_available(): print('[Runner] - CUDA is available!')
-        self.model_kept = []
         self.global_step = 1
         self.log = SummaryWriter(expdir)
 
@@ -53,7 +53,7 @@ class Runner():
         
         self.downstream_model.train()
 
-    def save_model(self, name='states', save_best=None):
+    def save_model(self, save_type=None):
         all_states = {
             'Upstream': self.upstream_model.state_dict() if self.args.fine_tune else None,
             'Downstream': self.downstream_model.state_dict(),
@@ -65,18 +65,18 @@ class Runner():
             },
         }
 
-        if save_best is not None:
-            model_path = f'{self.expdir}/{save_best}.ckpt'
-            torch.save(all_states, model_path)
-            return
+        def check_ckpt_num(directory):
+            ckpts = glob.glob(f'{directory}/states-*.ckpt')
+            if len(ckpts) > self.config['max_keep']:
+                ckpts = sorted(ckpts, key=lambda pth: int(pth.split('-')[-1].split('.')[0]))
+                for ckpt in ckpts[:len(ckpts) - self.config['max_keep']]:
+                    os.remove(ckpt)
 
-        model_path = f'{self.expdir}/{name}-{self.global_step}.ckpt'
+        save_dir = self.expdir if save_type is None else f'{self.expdir}/{save_type}'
+        os.makedirs(save_dir, exist_ok=True)
+        check_ckpt_num(save_dir)
+        model_path = f'{save_dir}/states-{self.global_step}.ckpt'
         torch.save(all_states, model_path)
-        self.model_kept.append(model_path)
-
-        if len(self.model_kept) >= int(self.config['max_keep']):
-            os.remove(self.model_kept[0])
-            self.model_kept.pop(0)
 
     def _get_length_masks(self, lengths):
         # lengths: (batch_size, ) in cuda
@@ -96,6 +96,7 @@ class Runner():
         # eval_settings: [(split_name, split_loader, split_current_best_metrics), ...]
         
         def eval_and_log():
+            self.save_model()
             for split_name, split_loader, metrics_best in eval_settings:
                 if split_loader is None:
                     continue
@@ -120,7 +121,7 @@ class Runner():
 
                 if (scores > metrics_best).sum() > 0:
                     metrics_best.data = torch.max(scores, metrics_best).data
-                    self.save_model(save_best=f'best_{split_name}')
+                    self.save_model(split_name)
         
         # start training
         loss_sum = 0
