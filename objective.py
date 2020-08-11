@@ -51,7 +51,7 @@ class L1(nn.Module):
 class WSD(nn.Module):
     def __init__(self, alpha=0.5, db_interval=30, eps=1e-10):
         super().__init__()
-        self.db_interval = 30
+        self.db_interval = db_interval
         self.alpha = alpha
         self.eps = eps
 
