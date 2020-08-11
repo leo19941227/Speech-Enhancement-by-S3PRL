@@ -13,6 +13,9 @@ hann = torch.Tensor(scipy.hanning(258)[1:-1])
 PAD_SIZE = 27
 
 
+def remove_self(variables):
+    return {k : v for k, v in variables.items() if k != 'self'}
+
 def masked_mean(batch, length_masks, keepdim=False, eps=1e-8):
     # batch: (batch_size, max_time)
     means = (batch * length_masks).sum(dim=-1, keepdim=keepdim) / (length_masks.sum(dim=-1, keepdim=keepdim) + eps)

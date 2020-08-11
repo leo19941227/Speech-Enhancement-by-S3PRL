@@ -84,9 +84,6 @@ class Runner():
         length_masks = (ascending < lengths.unsqueeze(-1)).long()
         return length_masks
 
-    def _noself(self, variables):
-        return {k : v for k, v in variables.items() if k != 'self'}
-
     def train(self, trainloader, subtrainloader=None, devloader=None, testloader=None):
         total_steps = int(self.config['epochs'] * len(trainloader))
         pbar = tqdm(total=total_steps)
@@ -157,7 +154,7 @@ class Runner():
                     # stft_length_masks: (batch_size, max_time)
 
                     predicted, model_results = self.downstream_model(features, linears=linear_inp)
-                    loss, objective_results = self.criterion(**self._noself(locals()), **model_results)
+                    loss, objective_results = self.criterion(**remove_self(locals()), **model_results)
                     loss.backward()
                     loss_sum += loss.item()
 
@@ -238,7 +235,7 @@ class Runner():
                     # stft_length_masks: (batch_size, max_time)
 
                     predicted, model_results = self.downstream_model(features, linears=linear_inp)
-                    loss, _ = self.criterion(**self._noself(locals()), **model_results)
+                    loss, _ = self.criterion(**remove_self(locals()), **model_results)
                     loss_sum += loss
 
                     wav_predicted = self.preprocessor.istft(predicted, phase_inp)
