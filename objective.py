@@ -7,29 +7,73 @@ from scipy.signal.windows import hann as hanning
 from torch import Tensor
 from functools import partial
 from utils import *
+from asteroid.losses.sdr import SingleSrcNegSDR
+from asteroid.losses.stoi import NegSTOILoss
+from asteroid.losses.pmsqe import SingleSrcPMSQE
 
-
-class SISDR(nn.Module):
-    def __init__(self, eps=1e-10):
+class stoi(nn.Module):
+    def __init__(self):
         super().__init__()
-        self.eps = eps
+        self.fn = NegSTOILoss(sample_rate = 16000)
+
+    def forward(self, wav_predicted, wav_tar, length_masks, **kwargs):
+        # stft_length_masks: (batch_size, max_time)
+        # predicted, linear_tar: (batch_size, max_time, feat_dim)
+       
+        src = wav_predicted * length_masks
+        tar = wav_tar * length_masks
+        loss = self.fn(src, tar).mean()
+        
+        return loss, {}
+
+
+class estoi(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fn = NegSTOILoss(sample_rate = 16000, extended=True)
+
+    def forward(self, wav_predicted, wav_tar, length_masks, **kwargs):
+        # stft_length_masks: (batch_size, max_time)
+        # predicted, linear_tar: (batch_size, max_time, feat_dim)
+       
+        src = wav_predicted * length_masks
+        tar = wav_tar * length_masks
+        loss = self.fn(src, tar).mean()
+        
+        return loss, {}
+
+
+class pmsqe(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fn = SingleSrcPMSQE()
+        self.fn.nbins = 400
 
     def forward(self, predicted, linear_tar, stft_length_masks, **kwargs):
         # stft_length_masks: (batch_size, max_time)
         # predicted, linear_tar: (batch_size, max_time, feat_dim)
+
         src = predicted * stft_length_masks.unsqueeze(-1)
         tar = linear_tar * stft_length_masks.unsqueeze(-1)
-
-        src = src.flatten(start_dim=1).contiguous()
-        tar = tar.flatten(start_dim=1).contiguous()
-
-        alpha = torch.sum(src * tar, dim=1) / (torch.sum(tar * tar, dim=1) + self.eps)
-        ay = alpha.unsqueeze(1) * tar
-        norm = torch.sum((ay - src) * (ay - src), dim=1) + self.eps
-        loss = -10 * torch.log10(torch.sum(ay * ay, dim=1) / norm + self.eps)
+        loss = self.fn(src, tar)
         
-        return loss.mean(), {}
+        return loss, {}
 
+
+class sisdr(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fn = SingleSrcNegSDR("sisdr", zero_mean=False, reduction='mean')
+
+    def forward(self, predicted, linear_tar, stft_length_masks, **kwargs):
+        # stft_length_masks: (batch_size, max_time)
+        # predicted, linear_tar: (batch_size, max_time, feat_dim)
+
+        src = predicted * stft_length_masks.unsqueeze(-1)
+        tar = linear_tar * stft_length_masks.unsqueeze(-1)
+        loss = self.fn(src, tar)
+        
+        return loss, {}
 
 class L1(nn.Module):
     def __init__(self, eps=1e-10):
