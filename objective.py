@@ -138,11 +138,13 @@ class WSD(nn.Module):
 
         noise_loss = (G * N * stft_length_masks.unsqueeze(-1)).pow(2).sum(-1).sum(-1).mean()
 
-        def logger_tmp(log, global_step, S, voice_mask, **kwargs):
+        def logger_tmp(log, global_step, S, voice_mask, energy, **kwargs):
             fig = plot_spectrogram(S[0].log())
             log.add_figure('WSD_speech', fig, global_step)
             fig = plot_spectrogram((S * voice_mask)[0].log())
             log.add_figure('WSD_voice_mask', fig, global_step)
-        logger = partial(logger_tmp, S=S, voice_mask=voice_mask)
+            fig = plot_spectrogram(energy.expand_as(S)[0])
+            log.add_figure('energy', fig, global_step)
+        logger = partial(logger_tmp, S=S, voice_mask=voice_mask, energy=energy)
 
         return self.alpha * speech_loss + (1 - self.alpha) * noise_loss, {'logger': logger}
