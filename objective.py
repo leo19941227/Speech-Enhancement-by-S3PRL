@@ -11,6 +11,7 @@ from asteroid.losses.sdr import SingleSrcNegSDR
 from asteroid.losses.stoi import NegSTOILoss
 from asteroid.losses.pmsqe import SingleSrcPMSQE
 
+
 class stoi(nn.Module):
     def __init__(self):
         super().__init__()
@@ -74,6 +75,29 @@ class sisdr(nn.Module):
         loss = self.fn(src, tar)
         
         return loss, {}
+
+
+class SISDR(nn.Module):
+    def __init__(self, eps=1e-10):
+        super().__init__()
+        self.eps = eps
+
+    def forward(self, predicted, linear_tar, stft_length_masks, **kwargs):
+        # stft_length_masks: (batch_size, max_time)
+        # predicted, linear_tar: (batch_size, max_time, feat_dim)
+        src = predicted * stft_length_masks.unsqueeze(-1)
+        tar = linear_tar * stft_length_masks.unsqueeze(-1)
+
+        src = src.flatten(start_dim=1).contiguous()
+        tar = tar.flatten(start_dim=1).contiguous()
+
+        alpha = torch.sum(src * tar, dim=1) / (torch.sum(tar * tar, dim=1) + self.eps)
+        ay = alpha.unsqueeze(1) * tar
+        norm = torch.sum((ay - src) * (ay - src), dim=1) + self.eps
+        loss = -10 * torch.log10(torch.sum(ay * ay, dim=1) / norm + self.eps)
+        
+        return loss.mean(), {}
+
 
 class L1(nn.Module):
     def __init__(self, eps=1e-10):
