@@ -166,6 +166,10 @@ class Runner():
                     # stft_length_masks: (batch_size, max_time)
 
                     predicted, model_results = self.downstream_model(features, linears=linear_inp)
+                    if 'stoi' in self.args.objective:
+                        wav_predicted = self.preprocessor.istft(predicted, phase_inp)
+                        length_masks = self._get_length_masks(lengths)
+
                     loss, objective_results = self.criterion(**remove_self(locals()), **model_results)
                     loss.backward()
                     loss_sum += loss.item()
@@ -247,11 +251,12 @@ class Runner():
                     # stft_length_masks: (batch_size, max_time)
 
                     predicted, model_results = self.downstream_model(features, linears=linear_inp)
+                    wav_predicted = self.preprocessor.istft(predicted, phase_inp)
+                    length_masks = self._get_length_masks(lengths)
+                
                     loss, _ = self.criterion(**remove_self(locals()), **model_results)
                     loss_sum += loss
 
-                    wav_predicted = self.preprocessor.istft(predicted, phase_inp)
-                    length_masks = self._get_length_masks(lengths)
                     wav_predicted = masked_normalize_decibel(wav_predicted, wav_tar, length_masks)
 
                     # split batch into list of utterances and duplicate N_METRICS times

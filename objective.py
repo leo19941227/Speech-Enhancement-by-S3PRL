@@ -7,6 +7,74 @@ from scipy.signal.windows import hann as hanning
 from torch import Tensor
 from functools import partial
 from utils import *
+from asteroid.losses.sdr import SingleSrcNegSDR
+from asteroid.losses.stoi import NegSTOILoss
+from asteroid.losses.pmsqe import SingleSrcPMSQE
+
+
+class stoi(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fn = NegSTOILoss(sample_rate = 16000)
+
+    def forward(self, wav_predicted, wav_tar, length_masks, **kwargs):
+        # stft_length_masks: (batch_size, max_time)
+        # predicted, linear_tar: (batch_size, max_time, feat_dim)
+       
+        src = wav_predicted * length_masks
+        tar = wav_tar * length_masks
+        loss = self.fn(src, tar).mean()
+        
+        return loss, {}
+
+
+class estoi(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fn = NegSTOILoss(sample_rate = 16000, extended=True)
+
+    def forward(self, wav_predicted, wav_tar, length_masks, **kwargs):
+        # stft_length_masks: (batch_size, max_time)
+        # predicted, linear_tar: (batch_size, max_time, feat_dim)
+       
+        src = wav_predicted * length_masks
+        tar = wav_tar * length_masks
+        loss = self.fn(src, tar).mean()
+        
+        return loss, {}
+
+
+class pmsqe(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fn = SingleSrcPMSQE()
+        self.fn.nbins = 400
+
+    def forward(self, predicted, linear_tar, stft_length_masks, **kwargs):
+        # stft_length_masks: (batch_size, max_time)
+        # predicted, linear_tar: (batch_size, max_time, feat_dim)
+
+        src = predicted * stft_length_masks.unsqueeze(-1)
+        tar = linear_tar * stft_length_masks.unsqueeze(-1)
+        loss = self.fn(src, tar)
+        
+        return loss, {}
+
+
+class sisdr(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fn = SingleSrcNegSDR("sisdr", zero_mean=False, reduction='mean')
+
+    def forward(self, predicted, linear_tar, stft_length_masks, **kwargs):
+        # stft_length_masks: (batch_size, max_time)
+        # predicted, linear_tar: (batch_size, max_time, feat_dim)
+
+        src = predicted * stft_length_masks.unsqueeze(-1)
+        tar = linear_tar * stft_length_masks.unsqueeze(-1)
+        loss = self.fn(src, tar)
+        
+        return loss, {}
 
 
 class SISDR(nn.Module):

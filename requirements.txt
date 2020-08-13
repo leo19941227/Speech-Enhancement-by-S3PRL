@@ -12,3 +12,4 @@ Pillow>=6.2.2
 numba==0.48
 pypesq
 pystoi
+asteroid
