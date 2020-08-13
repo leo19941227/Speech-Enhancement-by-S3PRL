@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from transformer.model import TransformerConfig, TransformerSpecPredictionHead
 
 
 class Linear(nn.Module):
@@ -67,3 +68,23 @@ class Residual(nn.Module):
         offset = self.scaling_layer(offset)
         predicted = linears * offset
         return predicted, {'offset': offset}
+
+
+class SpecHead(nn.Module):
+    def __init__(self, input_dim, output_dim, ckpt, eps=1e-6, **kwargs):
+        super(SpecHead, self).__init__()
+        assert ckpt != ''
+        ckpt = torch.load(ckpt, map_location='cpu')
+        trans_config = TransformerConfig(ckpt['Settings']['Config'])
+        trans_spechead = TransformerSpecPredictionHead(trans_config, output_dim)
+        trans_spechead.load_state_dict(ckpt['SpecHead'])
+        
+        assert trans_spechead.dense.in_features == input_dim
+        assert trans_spechead.output.out_features == output_dim
+
+        self.spechead = trans_spechead
+        self.eps = eps
+
+    def forward(self, features, **kwargs):
+        predicted, _ = self.spechead(features)
+        return predicted, {}

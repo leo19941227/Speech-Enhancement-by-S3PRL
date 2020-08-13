@@ -168,7 +168,8 @@ def get_dataloader(args, config):
 
 def get_downstream_model(args, input_dim, output_dim, config):
     device = 'cpu' if args.cpu else 'cuda'
-    model = eval(args.downstream)(input_dim, output_dim, **config['model'][args.downstream]).to(device=device)
+    model_config = config['model'][args.downstream] if args.downstream in config['model'] else {}
+    model = eval(args.downstream)(input_dim, output_dim, **model_config, **vars(args)).to(device=device)
     return model
 
 

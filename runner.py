@@ -133,6 +133,9 @@ class Runner():
                 if (scores > metrics_best).sum() > 0:
                     metrics_best.data = torch.max(scores, metrics_best).data
                     self.save_model(split_name)
+
+        # evaluate initialization
+        eval_and_log()
         
         # start training
         loss_sum = 0
