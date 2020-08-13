@@ -60,7 +60,7 @@ def get_downstream_args():
             resume_ckpt = args.resume
 
         ckpt = torch.load(resume_ckpt, map_location='cpu')
-        args = ckpt['Settings']['Paras']
+        args = update_args(args, ckpt['Settings']['Paras'])
         config = ckpt['Settings']['Config']
         setattr(args, 'resume', resume_ckpt)
     

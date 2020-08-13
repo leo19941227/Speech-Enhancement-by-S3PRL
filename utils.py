@@ -6,12 +6,19 @@ from scipy.signal.windows import hann as hanning
 import torch
 import torch.nn as nn
 from torch import Tensor
+from argparse import Namespace
 
 
 EPS = np.finfo("float").eps
 hann = torch.Tensor(scipy.hanning(258)[1:-1])
 PAD_SIZE = 27
 
+
+def update_args(old, new):
+    old_dict = vars(old)
+    new_dict = vars(new)
+    old_dict.update(new_dict)
+    return Namespace(**old_dict)
 
 def remove_self(variables):
     return {k : v for k, v in variables.items() if k != 'self'}
