@@ -85,6 +85,12 @@ class SpecHead(nn.Module):
         self.spechead = trans_spechead
         self.eps = eps
 
+        target_config = ckpt['Settings']['Config']['online']['target']
+        self.log = False if 'log' not in target_config else target_config['log']
+
     def forward(self, features, **kwargs):
         predicted, _ = self.spechead(features)
+        if self.log:
+            predicted = predicted.exp()
+
         return predicted, {}
