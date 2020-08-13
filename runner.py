@@ -47,7 +47,7 @@ class Runner():
             self.optimizer = get_optimizer(params=param_optimizer,
                                            lr=float(self.rconfig['learning_rate']), 
                                            warmup_proportion=float(self.rconfig['warmup_proportion']),
-                                           training_steps=int(self.rconfig['total_steps']))
+                                           training_steps=int(self.rconfig['total_step']))
         else:
             self.upstream_model.eval()
             self.optimizer = Adam(self.downstream_model.parameters(), lr=float(self.rconfig['learning_rate']), betas=(0.9, 0.999))
