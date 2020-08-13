@@ -17,6 +17,7 @@ from transformer.nn_transformer import TRANSFORMER
 from downstream.model import dummy_upstream
 from runner import Runner
 from model import *
+from utils import *
 from dataset import PseudoDataset, NoisyCleanDataset
 
 
