@@ -100,8 +100,9 @@ class SISDR(nn.Module):
 
 
 class L1(nn.Module):
-    def __init__(self, eps=1e-10):
+    def __init__(self, log=False, eps=1e-10):
         super().__init__()
+        self.log = log
         self.eps = eps
         self.fn = torch.nn.L1Loss()
 
@@ -111,7 +112,11 @@ class L1(nn.Module):
 
         src = predicted * stft_length_masks.unsqueeze(-1)
         tar = linear_tar * stft_length_masks.unsqueeze(-1)
-        l1 = self.fn(src, tar)
+
+        if self.log:
+            l1 = self.fn(src.log(), tar.log())
+        else:
+            l1 = self.fn(src, tar)
         
         return l1, {}
 
