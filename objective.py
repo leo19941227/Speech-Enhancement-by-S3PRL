@@ -134,8 +134,8 @@ class WSD(nn.Module):
         N = torch.max(linear_inp - linear_tar, torch.zeros(1).to(device))
         
         energy = S.sum(dim=-1, keepdim=True)
-        db_thres = 10 * torch.log10(energy.max()) - self.db_interval
-        voice_mask = ((10 * torch.log10(energy)) > db_thres).long()
+        db_thres = 10 * torch.log10(energy.max() + self.eps) - self.db_interval
+        voice_mask = ((10 * torch.log10(energy + self.eps)) > db_thres).long()
 
         speech_diff = (S - (G * S)) * voice_mask * stft_length_masks.unsqueeze(-1)
         speech_diff_powsum = speech_diff.pow(2).sum(-1).sum(-1)
@@ -144,9 +144,9 @@ class WSD(nn.Module):
         noise_loss = (G * N * stft_length_masks.unsqueeze(-1)).pow(2).sum(-1).sum(-1).mean()
 
         def logger_tmp(log, global_step, S, voice_mask, energy, **kwargs):
-            fig = plot_spectrogram(S[0].log())
+            fig = plot_spectrogram((S[0] + self.eps).log())
             log.add_figure('WSD_speech', fig, global_step)
-            fig = plot_spectrogram((S * voice_mask)[0].log())
+            fig = plot_spectrogram((S * voice_mask + self.eps)[0].log())
             log.add_figure('WSD_voice_mask', fig, global_step)
             fig = plot_spectrogram(energy.expand_as(S)[0])
             log.add_figure('WSD_energy', fig, global_step)
