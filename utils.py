@@ -56,6 +56,18 @@ def plot_spectrogram(spec, height=2):
     plt.imshow(spec)
     return fig
 
+def plot_spectrograms(specs, height=2):
+    assert type(specs) is list
+    specs = [spec.detach().cpu().squeeze().transpose(0, 1).flip(dims=[0]) for spec in specs]
+    h, w = specs[0].size(0), specs[0].size(1)
+    scaling = height / h
+    fig, axes = plt.subplots(len(specs), 1, figsize=(round(w * scaling), len(specs) * round(h * scaling)), gridspec_kw = {'wspace':0, 'hspace':0})
+    for i in range(len(specs)):
+        spec = specs[i]
+        assert spec.dim() == 2
+        h, w = spec.size(0), spec.size(1)        
+        axes[i].imshow(spec)
+    return fig
 
 
 class Silence_Remover(nn.Module):
