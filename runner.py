@@ -33,9 +33,11 @@ class Runner():
         self.grad_clip = self.rconfig['gradient_clipping']
         self.expdir = expdir
         self.metrics = [eval(f'{m}_eval') for m in self.rconfig['eval_metrics']]
-        self.criterion = eval(f'{self.args.objective}()').to(device=self.device)
         self.ascending = torch.arange(MAX_POSITIONS_LEN).to(device=self.device)
         self.eps = eps
+
+        criterion_config = config['objective'][args.objective] if args.objective in config['objective'] else {}
+        self.criterion = eval(f'{self.args.objective}(**criterion_config)').to(device=self.device)
 
         assert self.metrics is not None
         assert self.criterion is not None
