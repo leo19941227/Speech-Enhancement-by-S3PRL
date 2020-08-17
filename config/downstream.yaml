@@ -40,8 +40,8 @@ objective:
   SISDR:
     {}
   WSD:
-    db_interval: 30
-    alpha: 0.5
+    db_interval: 50
+    alpha: 0.3
 
 model:
   Linear:
