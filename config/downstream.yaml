@@ -14,7 +14,7 @@ preprocessor:
     cmvn: False
 
 runner:
-  learning_rate: 4.0e-4                                 # Learning rate for opt: ['4e-3' for fine-tune, '4e-3' for regualr downstream task training]
+  learning_rate: 4.0e-3                                 # Learning rate for opt: ['4e-3' for fine-tune, '4e-3' for regualr downstream task training]
   warmup_proportion: 0.07                               # Proportion of training to perform linear rate warmup.
   gradient_clipping: 1.0                                # Maximum gradient norm
   total_step: 20000                                            # total steps for training, a step is a batch of update
