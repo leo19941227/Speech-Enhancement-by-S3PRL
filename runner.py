@@ -220,6 +220,10 @@ class Runner():
                 pbar.update(1)
                 self.global_step += 1
 
+                del model_results
+                del objective_results
+                torch.cuda.empty_cache()
+
         pbar.close()
         self.log.close()
 
