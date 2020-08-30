@@ -211,6 +211,10 @@ class Runner():
                         self.save_model()
                         eval_and_log()
 
+                    del model_results
+                    del objective_results
+                    torch.cuda.empty_cache()
+
                 except RuntimeError as e:
                     if not 'CUDA out of memory' in str(e): raise
                     print('[Runner] - CUDA out of memory at step: ', self.global_step)
@@ -219,10 +223,6 @@ class Runner():
 
                 pbar.update(1)
                 self.global_step += 1
-
-                del model_results
-                del objective_results
-                torch.cuda.empty_cache()
 
         pbar.close()
         self.log.close()
