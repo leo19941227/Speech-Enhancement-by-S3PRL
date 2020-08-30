@@ -25,6 +25,7 @@ class LinearResidual(nn.Module):
         if self.cmvn:
             features = (features - features.mean(dim=1, keepdim=True)) / (features.std(dim=1, keepdim=True) + self.eps)
         offset = self.linear(features)
+        offset = self.act(offset)
         predicted = linears * offset
         return predicted, {'offset': offset}
 
