@@ -114,7 +114,7 @@ class L1(nn.Module):
         tar = linear_tar * stft_length_masks.unsqueeze(-1)
 
         if self.log:
-            l1 = self.fn(src.log(), tar.log())
+            l1 = self.fn((src + self.eps).log(), (tar + self.eps).log())
         else:
             l1 = self.fn(src, tar)
         
