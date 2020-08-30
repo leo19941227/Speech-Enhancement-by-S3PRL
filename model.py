@@ -13,6 +13,22 @@ class Linear(nn.Module):
         return predicted, {}
 
 
+class LinearResidual(nn.Module):
+    def __init__(self, input_size=201, output_size=201, activation='Sigmoid', cmvn=True, eps=1e-6, **kwargs):
+        super(LinearResidual, self).__init__()
+        self.linear = nn.Linear(input_size, output_size)
+        self.act = eval(f'nn.{activation}()')
+        self.cmvn = cmvn
+        self.eps = eps
+
+    def forward(self, features, linears, **kwargs):
+        if self.cmvn:
+            features = (features - features.mean(dim=1, keepdim=True)) / (features.std(dim=1, keepdim=True) + self.eps)
+        offset = self.linear(features)
+        predicted = linears * offset
+        return predicted, {'offset': offset}
+
+
 class LSTM(nn.Module):
     def __init__(self, input_size=201, output_size=201, hidden_size=201, num_layers=3, bidirectional=False,
                  activation='Sigmoid', **kwargs):

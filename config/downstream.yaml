@@ -46,6 +46,8 @@ objective:
 model:
   Linear:
     hidden_size: 256
+  LinearResidual:
+    cmvn: True
   LSTM:
     hidden_size: 256
     num_layers: 3
