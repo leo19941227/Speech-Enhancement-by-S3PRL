@@ -36,7 +36,7 @@ dataset:
 
 objective:
   L1:
-    log: False
+    log: True
   SISDR:
     {}
   WSD:
