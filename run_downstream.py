@@ -35,6 +35,7 @@ def get_downstream_args():
     parser.add_argument('--ckpt', default='', help='Path to upstream pre-trained checkpoint, required if using other than baseline', required=False)
     parser.add_argument('--fine_tune', action='store_true', help='Whether to fine tune the transformer model with downstream task.', required=False)
     parser.add_argument('--weighted_sum', action='store_true', help='Whether to use weighted sum on the transformer model with downstream task.', required=False)
+    parser.add_argument('--random_init', action='store_true')
 
     # Options
     parser.add_argument('--downstream', default='LSTM', required=False)
@@ -128,6 +129,11 @@ def get_upstream_model(args, input_dim):
         }
         upstream_model = TRANSFORMER(options, input_dim)
         upstream_model.permute_input = False
+
+        if args.random_init:
+            for para in self.parameters():
+                torch.nn.init.xavier_uniform_(para.data)
+
     elif args.upstream == 'baseline':
         upstream_model = dummy_upstream(input_dim)
 
