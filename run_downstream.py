@@ -131,8 +131,8 @@ def get_upstream_model(args, input_dim):
         upstream_model.permute_input = False
 
         if args.random_init:
-            for para in self.parameters():
-                torch.nn.init.xavier_uniform_(para.data)
+            for para in upstream_model.parameters():
+                torch.nn.init.uniform_(para.data)
 
     elif args.upstream == 'baseline':
         upstream_model = dummy_upstream(input_dim)
