@@ -109,13 +109,15 @@ class SpecHead(nn.Module):
         self.act = eval(f'nn.{activation}()')
 
         if random_init:
-            for para in self.parameters():
-                torch.nn.init.uniform_(para.data)
+            for param in self.parameters():
+                if param.dim() >= 2:
+                    nn.init.xavier_uniform_(param.data)
+                else:
+                    nn.init.constant_(param.data, 0)
 
     def forward(self, features, **kwargs):
         predicted, _ = self.spechead(features)
-        predicted = self.act(predicted)
         if self.log:
             predicted = predicted.exp()
-
+        predicted = self.act(predicted)
         return predicted, {}
