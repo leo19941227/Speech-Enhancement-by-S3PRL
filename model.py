@@ -4,12 +4,14 @@ from transformer.model import TransformerConfig, TransformerSpecPredictionHead
 
 
 class Linear(nn.Module):
-    def __init__(self, input_dim, output_dim, **kwargs):
+    def __init__(self, input_dim, output_dim, activation='ReLU', **kwargs):
         super(Linear, self).__init__()
         self.linear = nn.Linear(input_dim, output_dim)
+        self.act = eval(f'nn.{activation}()')
 
     def forward(self, features, **kwargs):
         predicted = self.linear(features)
+        predicted = self.act(predicted)
         return predicted, {}
 
 
@@ -32,7 +34,7 @@ class LinearResidual(nn.Module):
 
 class LSTM(nn.Module):
     def __init__(self, input_size=201, output_size=201, hidden_size=201, num_layers=3, bidirectional=False,
-                 activation='Sigmoid', **kwargs):
+                 activation='ReLU', **kwargs):
         super(LSTM, self).__init__()
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size,
                             num_layers=num_layers, batch_first=True, bidirectional=bidirectional)

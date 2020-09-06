@@ -45,7 +45,7 @@ objective:
 
 model:
   Linear:
-    hidden_size: 256
+    activation: ReLU
   LinearResidual:
     cmvn: True
   LSTM:
