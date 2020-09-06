@@ -114,8 +114,8 @@ class SpecHead(nn.Module):
 
     def forward(self, features, **kwargs):
         predicted, _ = self.spechead(features)
+        predicted = self.act(predicted)
         if self.log:
             predicted = predicted.exp()
-        predicted = self.act(predicted)
 
         return predicted, {}
