@@ -90,7 +90,7 @@ class Residual(nn.Module):
 
 
 class SpecHead(nn.Module):
-    def __init__(self, input_dim, output_dim, ckpt, random_init=False, eps=1e-6, **kwargs):
+    def __init__(self, input_dim, output_dim, ckpt, activation='ReLU', random_init=False, eps=1e-6, **kwargs):
         super(SpecHead, self).__init__()
         assert ckpt != ''
         ckpt = torch.load(ckpt, map_location='cpu')
@@ -106,6 +106,7 @@ class SpecHead(nn.Module):
 
         target_config = ckpt['Settings']['Config']['online']['target']
         self.log = False if 'log' not in target_config else target_config['log']
+        self.act = eval(f'nn.{activation}()')
 
         if random_init:
             for para in self.parameters():
@@ -115,5 +116,6 @@ class SpecHead(nn.Module):
         predicted, _ = self.spechead(features)
         if self.log:
             predicted = predicted.exp()
+        predicted = self.act(predicted)
 
         return predicted, {}
