@@ -126,9 +126,9 @@ def get_upstream_model(args, input_dim):
                    'spec_aug_prev' : 'True',
                    'weighted_sum'  : 'True' if args.weighted_sum else 'False',
                    'select_layer'  : -1,
+                   'permute_input' : 'False',
         }
         upstream_model = TRANSFORMER(options, input_dim)
-        upstream_model.permute_input = False
 
         if args.random_init:
             for para in upstream_model.parameters():

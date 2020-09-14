@@ -159,10 +159,10 @@ class Runner():
                     # wav = self.preprocessor.istft(linear, phase)
 
                     if self.args.fine_tune:
-                        features = self.upstream_model(feats_for_upstream)
+                        features = self.upstream_model(wavs.transpose(1, 2))
                     else:
                         with torch.no_grad():
-                            features = self.upstream_model(feats_for_upstream)
+                            features = self.upstream_model(wavs.transpose(1, 2))
                     # features: (batch_size, max_time, feat_dim)
 
                     stft_lengths = lengths // self.preprocessor._win_args['hop_length'] + 1
@@ -251,7 +251,7 @@ class Runner():
                     # wav: (batch_size, time)
 
                     feats_for_upstream, linear_inp, phase_inp, linear_tar, phase_tar = self.preprocessor(wavs)
-                    features = self.upstream_model(feats_for_upstream)
+                    features = self.upstream_model(wavs.transpose(1, 2))
                     # features: (batch_size, max_time, feat_dim)
 
                     stft_lengths = lengths // self.preprocessor._win_args['hop_length'] + 1
