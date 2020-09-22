@@ -26,8 +26,6 @@ def remove_self(variables):
 def masked_mean(batch, length_masks, keepdim=False, eps=1e-8):
     # batch: (batch_size, max_time)
     means = (batch * length_masks).sum(dim=-1, keepdim=keepdim) / (length_masks.sum(dim=-1, keepdim=keepdim) + eps)
-    if not keepdim:
-        means = means.squeeze(-1)
     return means
 
 def masked_normalize_decibel(audio, target, length_masks, eps=1e-8):
