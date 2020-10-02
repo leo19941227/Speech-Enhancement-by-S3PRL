@@ -52,7 +52,13 @@ class Runner():
                                            training_steps=int(self.rconfig['total_step']))
         else:
             self.upstream_model.eval()
-            self.optimizer = Adam(self.downstream_model.parameters(), lr=float(self.rconfig['learning_rate']), betas=(0.9, 0.999))
+            if self.args.downstream != 'Mockingjay':
+                self.optimizer = Adam(self.downstream_model.parameters(), lr=float(self.rconfig['learning_rate']), betas=(0.9, 0.999))
+            else:
+                self.optimizer = get_optimizer(params=list(self.downstream_model.named_parameters()),
+                                               lr=float(self.rconfig['learning_rate']), 
+                                               warmup_proportion=float(self.rconfig['warmup_proportion']),
+                                               training_steps=int(self.rconfig['total_step']))
         
         self.downstream_model.train()
         if self.args.resume is not None:
@@ -165,7 +171,6 @@ class Runner():
                     if self.args.pseudo_label:
                         with torch.no_grad():
                             linear_tar, _ = self.upstream_model.SpecHead(features)
-                            linear_tar = linear_tar.exp()
 
                     stft_lengths = lengths // self.preprocessor._win_args['hop_length'] + 1
                     stft_length_masks = self._get_length_masks(stft_lengths)
