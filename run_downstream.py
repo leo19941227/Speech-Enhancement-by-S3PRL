@@ -31,7 +31,7 @@ def get_downstream_args():
     parser.add_argument('--n_jobs', default=12, type=int)
 
     # upstream settings
-    parser.add_argument('--upstream', choices=['transformer', 'baseline'], default='baseline', help='Whether to use upstream models for speech representation or fine-tune.', required=False)
+    parser.add_argument('--upstream', choices=['transformer', 'baseline'], default='baseline', help='Specify the teacher model for distillation', required=False)
     parser.add_argument('--ckpt', default='', help='Path to upstream pre-trained checkpoint, required if using other than baseline', required=False)
     parser.add_argument('--fine_tune', action='store_true', help='Whether to fine tune the transformer model with downstream task.', required=False)
     parser.add_argument('--weighted_sum', action='store_true', help='Whether to use weighted sum on the transformer model with downstream task.', required=False)
@@ -39,6 +39,7 @@ def get_downstream_args():
 
     # Options
     parser.add_argument('--downstream', default='LSTM', required=False)
+    parser.add_argument('--dckpt', default='', help='Path to upstream pre-trained checkpoint, required if using other than baseline', required=False)
     parser.add_argument('--objective', default='L1', required=False)
     parser.add_argument('--config', default='config/downstream.yaml', help='Path to downstream experiment config.', required=False)
     parser.add_argument('--expdir', default='result', help='Path to store experiment result, if empty then default is used.', required=False)
@@ -46,6 +47,7 @@ def get_downstream_args():
     parser.add_argument('--cpu', action='store_true', help='Disable GPU training.')
     parser.add_argument('--wandb', action='store_true')
     parser.add_argument('--eval_init', action='store_true')
+    parser.add_argument('--pseudo_label', action='store_true')
 
     # parse
     args = parser.parse_args()
@@ -106,8 +108,7 @@ def get_preprocessor(args, config):
         OnlinePreprocessor.get_feat_config('phase', channel_tar),
     ]
 
-    device = 'cpu' if args.cpu else 'cuda'
-    preprocessor = OnlinePreprocessor(**pretrain_config['online'], feat_list=feat_list).to(device=device)
+    preprocessor = OnlinePreprocessor(**pretrain_config['online'], feat_list=feat_list)
     setattr(preprocessor, 'channel_inp', channel_inp)
     setattr(preprocessor, 'channel_tar', channel_tar)
     
@@ -128,7 +129,12 @@ def get_upstream_model(args, input_dim):
                    'select_layer'  : -1,
                    'permute_input' : 'False',
         }
-        upstream_model = TRANSFORMER(options, input_dim)
+        # get input_dim for specific checkpoint
+        pretrain_config = torch.load(args.ckpt, map_location='cpu')['Settings']['Config']
+        preprocessor = OnlinePreprocessor(**pretrain_config['online'])
+        inp_feat, tar_feat = preprocessor(feat_list=[pretrain_config['online']['input'], pretrain_config['online']['target']])
+        upstream_model = TRANSFORMER(options, inp_feat.size(-1))
+        setattr(upstream_model, 'SpecHead', SpecHead(tar_feat.size(-1), args.ckpt))
 
         if args.random_init:
             for para in upstream_model.parameters():
@@ -175,9 +181,8 @@ def get_dataloader(args, config):
 
 
 def get_downstream_model(args, input_dim, output_dim, config):
-    device = 'cpu' if args.cpu else 'cuda'
     model_config = config['model'][args.downstream] if args.downstream in config['model'] else {}
-    model = eval(args.downstream)(input_dim, output_dim, **model_config, **vars(args)).to(device=device)
+    model = eval(args.downstream)(input_dim=input_dim, output_dim=output_dim, **model_config, **vars(args))
     return model
 
 

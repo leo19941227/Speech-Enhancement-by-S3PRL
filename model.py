@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+from utility.preprocessor import OnlinePreprocessor
+from transformer.nn_transformer import TRANSFORMER
 from transformer.model import TransformerConfig, TransformerSpecPredictionHead
 
 
@@ -90,7 +92,7 @@ class Residual(nn.Module):
 
 
 class SpecHead(nn.Module):
-    def __init__(self, input_dim, output_dim, ckpt, activation='ReLU', random_init=False, eps=1e-6, **kwargs):
+    def __init__(self, output_dim, ckpt, activation='ReLU', random_init=False, eps=1e-6, **kwargs):
         super(SpecHead, self).__init__()
         assert ckpt != ''
         ckpt = torch.load(ckpt, map_location='cpu')
@@ -98,7 +100,6 @@ class SpecHead(nn.Module):
         trans_spechead = TransformerSpecPredictionHead(trans_config, output_dim)
         trans_spechead.load_state_dict(ckpt['SpecHead'])
         
-        assert trans_spechead.dense.in_features == input_dim
         assert trans_spechead.output.out_features == output_dim
 
         self.spechead = trans_spechead
@@ -116,6 +117,49 @@ class SpecHead(nn.Module):
                     nn.init.constant_(param.data, 0)
 
     def forward(self, features, **kwargs):
+        predicted, _ = self.spechead(features)
+        if self.log:
+            predicted = predicted.exp()
+        predicted = self.act(predicted)
+        return predicted, {}
+
+
+class Mockingjay(nn.Module):
+    def __init__(self, dckpt, activation='ReLU', eps=1e-6, **kwargs):
+        super(Mockingjay, self).__init__()
+        options = {'ckpt_file'     : dckpt,
+                   'load_pretrain' : 'True',
+                   'no_grad'       : 'False',
+                   'dropout'       : 'default',
+                   'spec_aug'      : 'False',
+                   'spec_aug_prev' : 'True',
+                   'weighted_sum'  : 'False',
+                   'select_layer'  : -1,
+                   'permute_input' : 'False',
+        }
+        # get input_dim for specific checkpoint
+        ckpt = torch.load(dckpt, map_location='cpu')
+        pretrain_config = ckpt['Settings']['Config']
+        preprocessor = OnlinePreprocessor(**pretrain_config['online'])
+        inp_feat, tar_feat = preprocessor(feat_list=[pretrain_config['online']['input'], pretrain_config['online']['target']])
+
+        # TRANSFORMER will automatically load parameters
+        self.mockingjay = TRANSFORMER(options, inp_feat.size(-1))
+
+        trans_config = TransformerConfig(ckpt['Settings']['Config'])
+        trans_spechead = TransformerSpecPredictionHead(trans_config, tar_feat.size(-1))
+        trans_spechead.load_state_dict(ckpt['SpecHead'])
+        assert trans_spechead.output.out_features == tar_feat.size(-1)
+
+        self.spechead = trans_spechead
+        self.eps = eps
+
+        target_config = ckpt['Settings']['Config']['online']['target']
+        self.log = False if 'log' not in target_config else target_config['log']
+        self.act = eval(f'nn.{activation}()')
+
+    def forward(self, features, **kwargs):
+        features = self.mockingjay(features)
         predicted, _ = self.spechead(features)
         if self.log:
             predicted = predicted.exp()

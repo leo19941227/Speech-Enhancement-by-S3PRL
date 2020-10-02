@@ -27,7 +27,7 @@ class Runner():
         self.args = args
         self.config = config
         self.rconfig = config['runner']
-        self.preprocessor = preprocessor
+        self.preprocessor = preprocessor.to(self.device)
         self.upstream_model = upstream.to(self.device)
         self.downstream_model = downstream.to(self.device)
         self.grad_clip = self.rconfig['gradient_clipping']
@@ -150,9 +150,6 @@ class Runner():
                     
                     lengths = lengths.to(device=self.device)
                     wavs = wavs.to(device=self.device)
-                    wav_inp = wavs[:, self.preprocessor.channel_inp, :]
-                    wav_tar = wavs[:, self.preprocessor.channel_tar, :]
-                    
                     feats_for_upstream, linear_inp, phase_inp, linear_tar, phase_tar = self.preprocessor(wavs)
                     # all features are already in CUDA and in shape: (batch_size, max_time, feat_dim)
                     # For reconstruction waveform from linear spectrogram ((power=2)) and phase, use the following:
@@ -165,12 +162,22 @@ class Runner():
                             features = self.upstream_model(wavs.transpose(1, 2))
                     # features: (batch_size, max_time, feat_dim)
 
+                    if self.args.pseudo_label:
+                        with torch.no_grad():
+                            linear_tar, _ = self.upstream_model.SpecHead(features)
+                            linear_tar = linear_tar.exp()
+
                     stft_lengths = lengths // self.preprocessor._win_args['hop_length'] + 1
                     stft_length_masks = self._get_length_masks(stft_lengths)
                     assert stft_length_masks.size(-1) == features.size(-2)
                     # stft_length_masks: (batch_size, max_time)
 
-                    predicted, model_results = self.downstream_model(features, linears=linear_inp)
+                    down_inp = features
+                    if self.args.downstream == 'Mockingjay':
+                        # nn_transformer will take care of feature extraction
+                        down_inp = wavs.transpose(1, 2)
+
+                    predicted, model_results = self.downstream_model(down_inp, linears=linear_inp)
                     if 'stoi' in self.args.objective:
                         wav_predicted = self.preprocessor.istft(predicted, phase_inp)
                         length_masks = self._get_length_masks(lengths)
@@ -259,7 +266,12 @@ class Runner():
                     assert stft_length_masks.size(-1) == features.size(-2)
                     # stft_length_masks: (batch_size, max_time)
 
-                    predicted, model_results = self.downstream_model(features, linears=linear_inp)
+                    down_inp = features
+                    if self.args.downstream == 'Mockingjay':
+                        # nn_transformer will take care of feature extraction
+                        down_inp = wavs.transpose(1, 2)
+
+                    predicted, model_results = self.downstream_model(down_inp, linears=linear_inp)
                     wav_predicted = self.preprocessor.istft(predicted, phase_inp)
                     length_masks = self._get_length_masks(lengths)
                 
