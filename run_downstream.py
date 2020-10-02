@@ -48,6 +48,7 @@ def get_downstream_args():
     parser.add_argument('--wandb', action='store_true')
     parser.add_argument('--eval_init', action='store_true')
     parser.add_argument('--pseudo_label', action='store_true')
+    parser.add_argument('--test_ratio', default=0.05, type=float)
 
     # parse
     args = parser.parse_args()
@@ -154,7 +155,7 @@ def get_dataloader(args, config):
     if args.trainset != '' and args.testset != '':
         train_set = NoisyCleanDataset(config['dataset'][args.trainset], channel_inp, channel_tar, args.seed, 0.9, True)
         dev_set = NoisyCleanDataset(config['dataset'][args.trainset], channel_inp, channel_tar, args.seed, 0.9, False)
-        test_set = NoisyCleanDataset(config['dataset'][args.testset], channel_inp, channel_tar, None)
+        test_set = NoisyCleanDataset(config['dataset'][args.testset], channel_inp, channel_tar, args.seed, args.test_ratio, True)
     else:
         train_set = PseudoDataset()
         dev_set = copy.deepcopy(train_set)
