@@ -36,6 +36,7 @@ def get_downstream_args():
     parser.add_argument('--fine_tune', action='store_true', help='Whether to fine tune the transformer model with downstream task.', required=False)
     parser.add_argument('--weighted_sum', action='store_true', help='Whether to use weighted sum on the transformer model with downstream task.', required=False)
     parser.add_argument('--random_init', action='store_true')
+    parser.add_argument('--pseudo_label', action='store_true')
 
     # Options
     parser.add_argument('--downstream', default='LSTM', required=False)
@@ -47,7 +48,6 @@ def get_downstream_args():
     parser.add_argument('--cpu', action='store_true', help='Disable GPU training.')
     parser.add_argument('--wandb', action='store_true')
     parser.add_argument('--eval_init', action='store_true')
-    parser.add_argument('--pseudo_label', action='store_true')
     parser.add_argument('--test_ratio', default=0.05, type=float)
 
     # parse
