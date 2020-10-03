@@ -18,7 +18,7 @@ from downstream.model import dummy_upstream
 from runner import Runner
 from model import *
 from utils import *
-from dataset import PseudoDataset, NoisyCleanDataset
+from dataset import PseudoDataset, NoisyCleanDataset, OnlineDatasetWrapper
 
 
 def get_downstream_args():
@@ -26,6 +26,7 @@ def get_downstream_args():
     parser.add_argument('--resume', help='Specify the downstream checkpoint path for continual training')
 
     parser.add_argument('--name', help='Name of current experiment.')
+    parser.add_argument('--trainset_class', default='NoisyCleanDataset')
     parser.add_argument('--trainset', default='dns')
     parser.add_argument('--testset', default='dns_test')
     parser.add_argument('--n_jobs', default=12, type=int)
@@ -153,8 +154,13 @@ def get_dataloader(args, config):
     channel_inp = config['preprocessor']['input_channel']
     channel_tar = config['preprocessor']['target_channel']
     if args.trainset != '' and args.testset != '':
-        train_set = NoisyCleanDataset(config['dataset'][args.trainset], channel_inp, channel_tar, args.seed, 0.9, True)
-        dev_set = NoisyCleanDataset(config['dataset'][args.trainset], channel_inp, channel_tar, args.seed, 0.9, False)
+        if args.trainset_class == 'NoisyCleanDataset':
+            train_set = NoisyCleanDataset(config['dataset'][args.trainset], channel_inp, channel_tar, args.seed, 0.9, True)
+            dev_set = NoisyCleanDataset(config['dataset'][args.trainset], channel_inp, channel_tar, args.seed, 0.9, False)
+        elif args.trainset_class == 'OnlineDataset':
+            train_set = OnlineDatasetWrapper(**config['online'])
+            dev_set = None
+
         test_set = NoisyCleanDataset(config['dataset'][args.testset], channel_inp, channel_tar, args.seed, args.test_ratio, True)
     else:
         train_set = PseudoDataset()
@@ -176,8 +182,8 @@ def get_dataloader(args, config):
     # dataloader for evaluation
     subtrain_loader = DataLoader(train_set.get_subset(config['runner']['eval_train_subset_ratio']),
                                  batch_size=dlconf['eval_batch_size'], num_workers=args.n_jobs, collate_fn=collate_fn)
-    dev_loader = DataLoader(dev_set, batch_size=dlconf['eval_batch_size'], num_workers=args.n_jobs, collate_fn=collate_fn)
-    test_loader = DataLoader(test_set, batch_size=dlconf['eval_batch_size'], num_workers=args.n_jobs, collate_fn=collate_fn)
+    dev_loader = None if dev_set is None else DataLoader(dev_set, batch_size=dlconf['eval_batch_size'], num_workers=args.n_jobs, collate_fn=collate_fn)
+    test_loader = None if test_set is None else DataLoader(test_set, batch_size=dlconf['eval_batch_size'], num_workers=args.n_jobs, collate_fn=collate_fn)
     return train_loader, subtrain_loader, dev_loader, test_loader
 
 
