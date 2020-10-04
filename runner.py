@@ -51,7 +51,10 @@ class Runner():
                                            warmup_proportion=float(self.rconfig['warmup_proportion']),
                                            training_steps=int(self.rconfig['total_step']))
         else:
-            self.upstream_model.eval()
+            if self.args.random_label:
+                self.upstream_model.train()
+            else:
+                self.upstream_model.eval()
             if self.args.downstream != 'Mockingjay':
                 self.optimizer = Adam(self.downstream_model.parameters(), lr=float(self.rconfig['learning_rate']), betas=(0.9, 0.999))
             else:
