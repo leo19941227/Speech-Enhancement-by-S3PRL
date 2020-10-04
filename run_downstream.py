@@ -48,7 +48,6 @@ def get_downstream_args():
     parser.add_argument('--cpu', action='store_true', help='Disable GPU training.')
     parser.add_argument('--wandb', action='store_true')
     parser.add_argument('--eval_init', action='store_true')
-    parser.add_argument('--test_ratio', default=0.05, type=float)
 
     # parse
     args = parser.parse_args()
