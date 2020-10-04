@@ -183,9 +183,6 @@ class Runner():
                         down_inp = wavs.transpose(1, 2)
 
                     predicted, model_results = self.downstream_model(down_inp, linears=linear_inp)
-                    if 'stoi' in self.args.objective:
-                        wav_predicted = self.preprocessor.istft(predicted, phase_inp)
-                        length_masks = self._get_length_masks(lengths)
 
                     loss, objective_results = self.criterion(**remove_self(locals()), **model_results)
                     loss.backward()
@@ -285,6 +282,7 @@ class Runner():
 
                     predicted, model_results = self.downstream_model(down_inp, linears=linear_inp)
                     wav_predicted = self.preprocessor.istft(predicted, phase_inp)
+                    wav_predicted = torch.cat([wav_predicted, wav_predicted.new_zeros(wav_predicted.size(0), max(lengths) - wav_predicted.size(1))], dim=1)
                     length_masks = self._get_length_masks(lengths)
                 
                     loss, _ = self.criterion(**remove_self(locals()), **model_results)

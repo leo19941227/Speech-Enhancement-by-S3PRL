@@ -29,7 +29,7 @@ class OnlineDatasetWrapper(OnlineDataset):
 
         if fileroot is not None and filelist is not None:
             with open(filelist, 'r') as handle:
-                self.filepths = [f'{fileroot}/{line[-1]}' for line in handle.readlines()]
+                self.filepths = [f'{fileroot}/{line[:-1]}' for line in handle.readlines()]
 
         self.filepths = sorted(self.filepths)
         self.noise_wavpths = sorted(self.noise_wavpths)
