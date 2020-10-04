@@ -42,7 +42,7 @@ def get_downstream_args():
     parser.add_argument('--downstream', default='LSTM', required=False)
     parser.add_argument('--dckpt', default='', help='Path to upstream pre-trained checkpoint, required if using other than baseline', required=False)
     parser.add_argument('--objective', default='L1', required=False)
-    parser.add_argument('--config', default='config/downstream.yaml', help='Path to downstream experiment config.', required=False)
+    parser.add_argument('--config', default='config/vcb.yaml', help='Path to downstream experiment config.', required=False)
     parser.add_argument('--expdir', default='result', help='Path to store experiment result, if empty then default is used.', required=False)
     parser.add_argument('--seed', default=1337, type=int, help='Random seed for reproducable results.', required=False)
     parser.add_argument('--cpu', action='store_true', help='Disable GPU training.')

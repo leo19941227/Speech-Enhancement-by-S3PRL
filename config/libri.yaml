@@ -1,0 +1,106 @@
+dataloader:
+  batch_size: 6                                         # training batch size, 12 for pre-train, 6 for cpc exp
+  eval_batch_size: 12
+
+preprocessor:
+  input_channel: 0
+  target_channel: 1
+  
+  # feat_type: complx, linear, phase, mel, mfcc
+  baseline:
+    feat_type: linear
+    log: False
+    delta: 0
+    cmvn: False
+
+runner:
+  learning_rate: 4.0e-5                                 # Learning rate for opt: ['4e-3' for fine-tune, '4e-3' for regualr downstream task training]
+  warmup_proportion: 0.07                               # Proportion of training to perform linear rate warmup.
+  gradient_clipping: 1.0                                # Maximum gradient norm
+  total_step: 20000                                            # total steps for training, a step is a batch of update
+  log_step: 500                                          # log training status every this amount of training steps
+  eval_step: 1000                                         # evaluate every this amount of training steps
+  max_keep: 1                                           # maximum number of model ckpt to keep during training
+  eval_splits: ['subtrain', 'dev', 'test']
+  eval_metrics: ['stoi', 'pesq_nb', 'sisdr']
+  eval_train_subset_ratio: 0.05
+  eval_log_wavs_num: 5
+
+objective:
+  L1:
+    log: True
+  SISDR:
+    {}
+  WSD:
+    db_interval: 50
+    alpha: 0.3
+
+model:
+  Linear:
+    activation: ReLU
+  LinearResidual:
+    cmvn: True
+  LSTM:
+    hidden_size: 256
+    num_layers: 3
+    bidirectional: False
+    activation: ReLU
+  Residual:
+    hidden_size: 256
+    num_layers: 3
+    bidirectional: False
+    activation: Sigmoid
+    cmvn: True
+
+NoisyCleanDataset_train:
+  roots: [
+    '../datasets/DNS-Challenge/',
+  ]
+
+NoisyCleanDataset_test:
+  roots: [
+    '/home/leo/d/datasets/DNS-Challenge/datasets/test_set/synthetic/no_reverb',
+  ]
+
+OnlineDatasetWrapper_train:
+  # dataset
+  roots: [
+    '../datasets/LibriSpeech/train-clean-100',
+    '../datasets/LibriSpeech/train-clean-360'
+  ]
+  sample_rate: 16000
+  # Hz, all utterances prepared in roots should be in the same
+  # sample rate currently, can implement resampling in the future
+  max_time: 10000
+  min_time: 10000
+  # msec, longer utterances will be trimmed
+  # maximum time of LibriSpeech is about 36 sec
+  target_level: -25
+  # pretrained utterances are first scaled to the same decibel level
+  noise_proportion: 1.0
+  # stochastically add gaussian noise to input waveforms
+  noise_type: '../datasets/noise_data/Nonspeech_noclass'
+  snrs: [3, 6, 9]
+  # sample a noise level for each noise addition
+
+OnlineDatasetWrapper_test:
+  # dataset
+  roots: [
+    '../datasets/LibriSpeech/test-clean',
+  ]
+  fileroot: '../datasets/LibriSpeech/test-clean'
+  filelist: 'libri-test-clean-10s.txt'
+  sample_rate: 16000
+  # Hz, all utterances prepared in roots should be in the same
+  # sample rate currently, can implement resampling in the future
+  max_time: 10000
+  min_time: 0
+  # msec, longer utterances will be trimmed
+  # maximum time of LibriSpeech is about 36 sec
+  target_level: -25
+  # pretrained utterances are first scaled to the same decibel level
+  noise_proportion: 1.0
+  # stochastically add gaussian noise to input waveforms
+  noise_type: '../datasets/noise_data/Nonspeech_noclass'
+  snrs: [3, 6, 9]
+  # sample a noise level for each noise addition

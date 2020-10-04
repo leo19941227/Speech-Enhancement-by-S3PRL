@@ -23,9 +23,14 @@ class PseudoDataset(Dataset):
 
 
 class OnlineDatasetWrapper(OnlineDataset):
-    def __init__(self, sample_num=None, seed=1227, **kwargs):
+    def __init__(self, sample_num=None, fileroot=None, filelist=None, seed=1227, **kwargs):
         super(OnlineDatasetWrapper, self).__init__(**kwargs)
         random.seed(seed)
+
+        if fileroot is not None and filelist is not None:
+            with open(filelist, 'r') as handle:
+                self.filepths = [f'{fileroot}/{line[-1]}' for line in handle.readlines()]
+
         self.filepths = sorted(self.filepths)
         self.noise_wavpths = sorted(self.noise_wavpths)
 

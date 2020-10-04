@@ -91,7 +91,7 @@ OnlineDatasetWrapper_test:
   # Hz, all utterances prepared in roots should be in the same
   # sample rate currently, can implement resampling in the future
   max_time: 10000
-  min_time: 10000
+  min_time: 0
   # msec, longer utterances will be trimmed
   # maximum time of LibriSpeech is about 36 sec
   target_level: -25
@@ -101,4 +101,3 @@ OnlineDatasetWrapper_test:
   noise_type: '../datasets/noise_data/Nonspeech_noclass'
   snrs: [-8, -6, -4, -2, 0, 2, 4, 6, 8]
   # sample a noise level for each noise addition
-  sample_num: 1200
