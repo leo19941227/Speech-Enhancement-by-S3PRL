@@ -38,6 +38,7 @@ def get_downstream_args():
     parser.add_argument('--random_init', action='store_true')
     parser.add_argument('--pseudo_label', action='store_true')
     parser.add_argument('--random_label', action='store_true')
+    parser.add_argument('--dropout', type=float)
 
     # Options
     parser.add_argument('--downstream', default='LSTM', required=False)
@@ -123,7 +124,7 @@ def get_upstream_model(args, input_dim):
         options = {'ckpt_file'     : args.ckpt,
                    'load_pretrain' : 'True',
                    'no_grad'       : 'True' if not args.fine_tune else 'False',
-                   'dropout'       : 'default',
+                   'dropout'       : 'default' if args.dropout is None else args.dropout,
                    'spec_aug'      : 'False',
                    'spec_aug_prev' : 'True',
                    'weighted_sum'  : 'True' if args.weighted_sum else 'False',
