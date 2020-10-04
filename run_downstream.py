@@ -26,9 +26,8 @@ def get_downstream_args():
     parser.add_argument('--resume', help='Specify the downstream checkpoint path for continual training')
 
     parser.add_argument('--name', help='Name of current experiment.')
-    parser.add_argument('--trainset_class', default='NoisyCleanDataset')
-    parser.add_argument('--trainset', default='dns')
-    parser.add_argument('--testset', default='dns_test')
+    parser.add_argument('--trainset', default='OnlineDatasetWrapper')
+    parser.add_argument('--testset', default='OnlineDatasetWrapper')
     parser.add_argument('--n_jobs', default=12, type=int)
 
     # upstream settings
@@ -151,21 +150,9 @@ def get_upstream_model(args, input_dim):
 
 
 def get_dataloader(args, config):
-    channel_inp = config['preprocessor']['input_channel']
-    channel_tar = config['preprocessor']['target_channel']
-    if args.trainset != '' and args.testset != '':
-        if args.trainset_class == 'NoisyCleanDataset':
-            train_set = NoisyCleanDataset(config['dataset'][args.trainset], channel_inp, channel_tar, args.seed, 0.9, True)
-            dev_set = NoisyCleanDataset(config['dataset'][args.trainset], channel_inp, channel_tar, args.seed, 0.9, False)
-        elif args.trainset_class == 'OnlineDataset':
-            train_set = OnlineDatasetWrapper(**config['online'])
-            dev_set = None
-
-        test_set = NoisyCleanDataset(config['dataset'][args.testset], channel_inp, channel_tar, args.seed, args.test_ratio, True)
-    else:
-        train_set = PseudoDataset()
-        dev_set = copy.deepcopy(train_set)
-        test_set = copy.deepcopy(train_set)
+    train_set = eval(args.trainset)(**config[f'{args.trainset}_train'])
+    test_set = eval(args.testset)(**config[f'{args.testset}_test'])
+    dev_set = None
 
     def collate_fn(samples):
         # samples: [(seq_len, channel), ...]

@@ -23,8 +23,18 @@ class PseudoDataset(Dataset):
 
 
 class OnlineDatasetWrapper(OnlineDataset):
-    def __init__(self, **kwargs):
+    def __init__(self, sample_num=None, seed=1227, **kwargs):
         super(OnlineDatasetWrapper, self).__init__(**kwargs)
+        random.seed(seed)
+        self.filepths = sorted(self.filepths)
+        self.noise_wavpths = sorted(self.noise_wavpths)
+
+        if sample_num is not None:
+            if len(self.filepths) >= sample_num:
+                self.filepths = self.filepths[:sample_num]
+            else:
+                times = sample_num // len(self.filepths) + 1
+                self.filepths = (self.filepths * times)[:sample_num]
 
     def get_subset(self, ratio=0.2, sample_seed=None):
         subset = copy.deepcopy(self)
@@ -43,23 +53,28 @@ class NoisyCleanDataset(Dataset):
     # This dataset identify the clean/noisy pair by the regex pattern in the filename
     # Each directory in roots should contain two sub-directories: clean & noisy
     # eg. The noisy file 'root/noisy/fileid_0.wav' has the label of the clean file 'root/clean/fileid_0.wav'
-    def __init__(self, roots, noisy_channel=0, clean_channel=1, sample_seed=None, sample_ratio=0.8,
-                 select_sampled=True, regex='fileid_\d+', max_sec=10.0):
+    def __init__(self, roots, noisy_channel=0, clean_channel=1, seed=1227, sample_ratio=1.0,
+                 select_sampled=True, sample_num=None, regex='fileid_\d+', max_sec=10.0):
+        random.seed(seed)
+
         clean_pths = []
         for root in roots:
             clean_pths.extend(find_files(os.path.join(root, 'clean')))
         clean_pths = sorted(clean_pths)
 
-        if sample_seed is None:
-            self.clean_pths = clean_pths
+        sampled = random.sample(clean_pths, round(len(clean_pths) * sample_ratio))
+        if select_sampled:
+            self.clean_pths = sampled
         else:
-            random.seed(sample_seed)
-            sampled = random.sample(clean_pths, round(len(clean_pths) * sample_ratio))
-            if select_sampled:
-                self.clean_pths = sampled
-            else:
-                self.clean_pths = [pth for pth in clean_pths if pth not in sampled]
+            self.clean_pths = [pth for pth in clean_pths if pth not in sampled]
         assert len(self.clean_pths) > 0
+
+        if sample_num is not None:
+            if len(self.clean_pths) >= sample_num:
+                self.clean_pths = self.clean_pths[:sample_num]
+            else:
+                times = sample_num // len(self.clean_pths) + 1
+                self.clean_pths = (self.clean_pths * times)[:sample_num]
 
         self.noisy_channel = noisy_channel
         self.clean_channel = clean_channel

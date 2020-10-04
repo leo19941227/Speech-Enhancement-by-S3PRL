@@ -240,6 +240,13 @@ class Runner():
         self.log.close()
 
     def evaluate(self, dataloader):
+        random.seed(self.args.seed)
+        np.random.seed(self.args.seed)
+        torch.manual_seed(self.args.seed)
+        if torch.cuda.is_available(): torch.cuda.manual_seed_all(self.args.seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = True
+
         torch.cuda.empty_cache()
         self.upstream_model.eval()
         self.downstream_model.eval()
