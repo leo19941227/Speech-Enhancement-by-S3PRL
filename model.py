@@ -41,7 +41,7 @@ class LSTM(nn.Module):
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size,
                             num_layers=num_layers, batch_first=True, bidirectional=bidirectional)
         self.scaling_layer = nn.Sequential(
-            nn.Linear(hidden_size, output_size), eval(f'nn.{activation}()'))
+            nn.Linear(max(1, int(bidirectional) * 2) * hidden_size, output_size), eval(f'nn.{activation}()'))
         self.init_weights()
         self.bidirectional = bidirectional
 
@@ -67,7 +67,7 @@ class Residual(nn.Module):
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size,
                             num_layers=num_layers, batch_first=True, bidirectional=bidirectional)
         self.scaling_layer = nn.Sequential(
-            nn.Linear(hidden_size, output_size), eval(f'nn.{activation}()'))
+            nn.Linear(max(1, int(bidirectional) * 2) * hidden_size, output_size), eval(f'nn.{activation}()'))
         self.init_weights()
         self.bidirectional = bidirectional
         self.cmvn = cmvn
