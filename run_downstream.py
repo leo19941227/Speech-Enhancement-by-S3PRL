@@ -44,6 +44,9 @@ def get_downstream_args():
     parser.add_argument('--downstream', default='LSTM', required=False)
     parser.add_argument('--dckpt', default='', help='Path to upstream pre-trained checkpoint, required if using other than baseline', required=False)
     parser.add_argument('--objective', default='L1', required=False)
+    parser.add_argument('--from_wavform', action='store_true')
+    parser.add_argument('--from_rawfeature', action='store_true')
+
     parser.add_argument('--config', default='config/vcb.yaml', help='Path to downstream experiment config.', required=False)
     parser.add_argument('--expdir', default='result', help='Path to store experiment result, if empty then default is used.', required=False)
     parser.add_argument('--seed', default=1337, type=int, help='Random seed for reproducable results.', required=False)
@@ -95,15 +98,23 @@ def get_preprocessor(args, config):
 
     if args.upstream == 'transformer':
         upstream_feat = pretrain_config['online']['input']
-    elif args.upstream == 'baseline':
+    else:
         upstream_feat = config['preprocessor']['baseline']
-    
+
+    if args.dckpt != '':
+        downstream_config = torch.load(args.dckpt, map_location='cpu')['Settings']['Config']
+        downstream_feat = downstream_config['online']['input']
+    else:
+        downstream_feat = config['preprocessor']['baseline']
+
     channel_inp = config['preprocessor']['input_channel']
     channel_tar = config['preprocessor']['target_channel']
     upstream_feat['channel'] = channel_inp
+    downstream_feat['channel'] = channel_inp
     
     feat_list = [
         upstream_feat,
+        downstream_feat,
         OnlinePreprocessor.get_feat_config('linear', channel_inp),
         OnlinePreprocessor.get_feat_config('phase', channel_inp),
         OnlinePreprocessor.get_feat_config('linear', channel_tar),
@@ -114,8 +125,8 @@ def get_preprocessor(args, config):
     setattr(preprocessor, 'channel_inp', channel_inp)
     setattr(preprocessor, 'channel_tar', channel_tar)
     
-    upstream_feat, inp_linear, inp_phase, tar_linear, tar_phase = preprocessor()
-    return preprocessor, upstream_feat.size(-1), tar_linear.size(-1)
+    upstream_feat, downstream_feat, inp_linear, inp_phase, tar_linear, tar_phase = preprocessor()
+    return preprocessor, upstream_feat.size(-1), downstream_feat.size(-1), tar_linear.size(-1)
 
 
 def get_upstream_model(args, input_dim):
@@ -176,8 +187,19 @@ def get_dataloader(args, config):
 
 
 def get_downstream_model(args, input_dim, output_dim, config):
-    model_config = config['model'][args.downstream] if args.downstream in config['model'] else {}
-    model = eval(args.downstream)(input_dim=input_dim, output_dim=output_dim, **model_config, **vars(args))
+    if args.dckpt == '':
+        model_config = config['model'][args.downstream] if args.downstream in config['model'] else {}
+    else:
+        dckpt = torch.load(args.dckpt, map_location='cpu')
+        model_config = dckpt['Settings']['Config']['small_model']['model']
+
+    configs = vars(args)
+    configs.update(model_config)
+    model = eval(args.downstream)(input_size=input_dim, output_size=output_dim, **configs)
+
+    if args.dckpt != '':
+        state_dict = {'.'.join(key.split('.')[1:]): value for key, value in dckpt['SmallModel'].items()}
+        model.load_state_dict(state_dict)
     return model
 
 
@@ -204,7 +226,7 @@ def main():
     copyfile(args.config, os.path.join(expdir, args.config.split('/')[-1]))
 
     # get preprocessor
-    preprocessor, upstream_feat_dim, tar_linear_dim = get_preprocessor(args, config)
+    preprocessor, upstream_feat_dim, downstream_feat_dim, tar_linear_dim = get_preprocessor(args, config)
 
     # get upstream model
     upstream_model = get_upstream_model(args, upstream_feat_dim)
@@ -213,7 +235,8 @@ def main():
     train_loader, *eval_loaders = get_dataloader(args, config)
 
     # get downstream model
-    downstream_model = get_downstream_model(args, upstream_model.out_dim, tar_linear_dim, config)
+    downstream_inpdim = downstream_feat_dim if (args.from_rawfeature or args.from_wavform) else upstream_model.out_dim
+    downstream_model = get_downstream_model(args, downstream_inpdim, tar_linear_dim, config)
 
     # train
     runner = Runner(args=args,
