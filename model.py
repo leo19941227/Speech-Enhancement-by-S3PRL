@@ -119,9 +119,11 @@ class SpecHead(nn.Module):
     def forward(self, features, **kwargs):
         predicted, _ = self.spechead(features)
         if self.log:
-            predicted = predicted.exp()
+            predicted, log_predicted = predicted.exp(), predicted
+        else:
+            log_predicted = (predicted + self.eps).log()
         predicted = self.act(predicted)
-        return predicted, {}
+        return predicted, {'log_predicted': log_predicted}
 
 
 class Mockingjay(nn.Module):
@@ -162,6 +164,8 @@ class Mockingjay(nn.Module):
         features = self.mockingjay(features)
         predicted, _ = self.spechead(features)
         if self.log:
-            predicted = predicted.exp()
+            predicted, log_predicted = predicted.exp(), predicted
+        else:
+            log_predicted = (predicted + self.eps).log()
         predicted = self.act(predicted)
-        return predicted, {}
+        return predicted, {'log_predicted': log_predicted}
