@@ -277,7 +277,7 @@ class Runner():
         loss_sum = 0
         oom_counter = 0
         scores_sum = torch.zeros(len(self.metrics))
-        for indice, (lengths, wavs) in enumerate(tqdm(dataloader, desc="Iteration")):
+        for indice, (lengths, wavs, _, _) in enumerate(tqdm(dataloader, desc="Iteration")):
             with torch.no_grad():
                 try:
                     lengths = lengths.to(device=self.device)
