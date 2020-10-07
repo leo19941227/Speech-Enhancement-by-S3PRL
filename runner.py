@@ -9,6 +9,7 @@ from torch.optim import Adam
 from tensorboardX import SummaryWriter
 from downstream.solver import get_optimizer
 from joblib import Parallel, delayed
+from dataloader import OnlineDataset
 from evaluation import *
 from objective import *
 from utils import *
@@ -151,7 +152,7 @@ class Runner():
         # start training
         loss_sum = 0
         while self.global_step <= total_steps:
-            for lengths, wavs in trainloader:
+            for lengths, wavs, channel3_lengths, channel3_wavs in trainloader:
                 # wavs: (batch_size, channel, max_len)
                 try:
                     if self.global_step > total_steps:
@@ -174,23 +175,34 @@ class Runner():
                             features = self.upstream_model(feats_for_upstream)
                     # features: (batch_size, max_time, feat_dim)
 
-                    if self.args.pseudo_label:
+                    if self.args.pseudo_clean or self.args.pseudo_noise:
                         with torch.no_grad():
-                            linear_tar, _ = self.upstream_model.SpecHead(features)
+                            linear_clean, _ = self.upstream_model.SpecHead(features)
+                            if self.args.pseudo_clean:
+                                linear_tar = linear_clean
+                            else:
+                                channel3_lengths = channel3_lengths.to(device=self.device)
+                                channel3_wavs = channel3_wavs.to(device=self.device)
+                                wav_clean = self.preprocessor.istft(linear_clean, phase_inp)
+                                wav_clean = torch.cat([wav_clean, wav_clean.new_zeros(wav_clean.size(0), max(lengths) - wav_clean.size(1))], dim=1)
+                                wav_noise = wavs[:, 0, :] - wav_clean
+                                wav_noisy = OnlineDataset.add_noise(channel3_wavs, wav_noise, list(range(-8, 8))) * self._get_length_masks(channel3_lengths)
+                                wavs = torch.stack([wav_noisy, channel3_wavs], dim=1)
+                                lengths = channel3_lengths
+                                _, feats_for_downstream, linear_inp, phase_inp, linear_tar, phase_tar = self.preprocessor(wavs)
 
                     stft_lengths = lengths // self.preprocessor._win_args['hop_length'] + 1
                     stft_length_masks = self._get_length_masks(stft_lengths)
-                    assert stft_length_masks.size(-1) == features.size(-2)
                     # stft_length_masks: (batch_size, max_time)
 
                     down_inp = features
-                    if self.args.from_wavform:
+                    if self.args.from_waveform:
                         # nn_transformer will take care of feature extraction
                         down_inp = wavs.transpose(1, 2)
                     elif self.args.from_rawfeature:
                         down_inp = feats_for_downstream
 
-                    predicted, model_results = self.downstream_model(down_inp, linears=linear_inp)
+                    predicted, model_results = self.downstream_model(features=down_inp, linears=linear_inp)
 
                     loss, objective_results = self.criterion(**remove_self(locals()), **model_results)
                     loss.backward()
@@ -286,7 +298,7 @@ class Runner():
                     # stft_length_masks: (batch_size, max_time)
 
                     down_inp = features
-                    if self.args.from_wavform:
+                    if self.args.from_waveform:
                         # nn_transformer will take care of feature extraction
                         down_inp = wavs.transpose(1, 2)
                     elif self.args.from_rawfeature:

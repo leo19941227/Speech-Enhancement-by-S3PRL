@@ -36,7 +36,8 @@ def get_downstream_args():
     parser.add_argument('--fine_tune', action='store_true', help='Whether to fine tune the transformer model with downstream task.', required=False)
     parser.add_argument('--weighted_sum', action='store_true', help='Whether to use weighted sum on the transformer model with downstream task.', required=False)
     parser.add_argument('--random_init', action='store_true')
-    parser.add_argument('--pseudo_label', action='store_true')
+    parser.add_argument('--pseudo_clean', action='store_true')
+    parser.add_argument('--pseudo_noise', action='store_true')
     parser.add_argument('--random_label', action='store_true')
     parser.add_argument('--dropout', type=float)
 
@@ -44,7 +45,7 @@ def get_downstream_args():
     parser.add_argument('--downstream', default='LSTM', required=False)
     parser.add_argument('--dckpt', default='', help='Path to upstream pre-trained checkpoint, required if using other than baseline', required=False)
     parser.add_argument('--objective', default='L1', required=False)
-    parser.add_argument('--from_wavform', action='store_true')
+    parser.add_argument('--from_waveform', action='store_true')
     parser.add_argument('--from_rawfeature', action='store_true')
 
     parser.add_argument('--config', default='config/vcb.yaml', help='Path to downstream experiment config.', required=False)
@@ -167,13 +168,18 @@ def get_dataloader(args, config):
     dev_set = None
 
     def collate_fn(samples):
-        # samples: [(seq_len, channel), ...]
-        lengths = torch.LongTensor([len(s) for s in samples])
-        # lengths: record all the length of each utterances in a batch
-        samples = pad_sequence(samples, batch_first=True)
-        # samples: (batch_size, max_len, channel)
-        return lengths, samples.transpose(-1, -2).contiguous()
-        # return: (batch_size, channel, max_len)
+        parse = [[samples[i][j] for i in range(len(samples))] for j in range(len(samples[0]))]
+        if len(samples[0]) == 1:
+            wavs = parse[0]
+        else:
+            wavs, channel3s = parse
+        lengths = torch.LongTensor([len(s) for s in wavs])
+        samples = pad_sequence(wavs, batch_first=True).transpose(-1, -2).contiguous()
+
+        channel3_lengths = torch.LongTensor([len(s) for s in channel3s]) if 'channel3s' in locals() else lengths
+        channel3_samples = pad_sequence(channel3s, batch_first=True) if 'channel3s' in locals() else samples[:, 0, :]
+
+        return lengths, samples, channel3_lengths, channel3_samples
 
     dlconf = config['dataloader']
     # dataloader for training
@@ -191,13 +197,15 @@ def get_downstream_model(args, input_dim, output_dim, config):
         model_config = config['model'][args.downstream] if args.downstream in config['model'] else {}
     else:
         dckpt = torch.load(args.dckpt, map_location='cpu')
-        model_config = dckpt['Settings']['Config']['small_model']['model']
+        model_config = {}
+        if args.downstream != 'Mockingjay':
+            model_config = dckpt['Settings']['Config']['small_model']['model']
 
     configs = vars(args)
     configs.update(model_config)
     model = eval(args.downstream)(input_size=input_dim, output_size=output_dim, **configs)
 
-    if args.dckpt != '':
+    if args.dckpt != '' and args.downstream != 'Mockingjay':
         state_dict = {'.'.join(key.split('.')[1:]): value for key, value in dckpt['SmallModel'].items()}
         model.load_state_dict(state_dict)
     return model
@@ -235,7 +243,7 @@ def main():
     train_loader, *eval_loaders = get_dataloader(args, config)
 
     # get downstream model
-    downstream_inpdim = downstream_feat_dim if (args.from_rawfeature or args.from_wavform) else upstream_model.out_dim
+    downstream_inpdim = downstream_feat_dim if (args.from_rawfeature or args.from_waveform) else upstream_model.out_dim
     downstream_model = get_downstream_model(args, downstream_inpdim, tar_linear_dim, config)
 
     # train

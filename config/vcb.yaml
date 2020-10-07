@@ -81,6 +81,7 @@ OnlineDatasetWrapper_train:
   noise_type: '../datasets/noise_data/Nonspeech_noclass'
   snrs: [-8, -6, -4, -2, 0, 2, 4, 6, 8]
   # sample a noise level for each noise addition
+  channel3: '../datasets/LibriSpeech/train-clean-360'
 
 OnlineDatasetWrapper_test:
   # dataset
