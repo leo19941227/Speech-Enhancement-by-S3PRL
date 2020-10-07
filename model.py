@@ -92,15 +92,15 @@ class Residual(nn.Module):
 
 
 class SpecHead(nn.Module):
-    def __init__(self, output_dim, ckpt, activation='ReLU', random_init=False, eps=1e-6, **kwargs):
+    def __init__(self, output_size, ckpt, activation='ReLU', random_init=False, eps=1e-6, **kwargs):
         super(SpecHead, self).__init__()
         assert ckpt != ''
         ckpt = torch.load(ckpt, map_location='cpu')
         trans_config = TransformerConfig(ckpt['Settings']['Config'])
-        trans_spechead = TransformerSpecPredictionHead(trans_config, output_dim)
+        trans_spechead = TransformerSpecPredictionHead(trans_config, output_size)
         trans_spechead.load_state_dict(ckpt['SpecHead'])
         
-        assert trans_spechead.output.out_features == output_dim
+        assert trans_spechead.output.out_features == output_size
 
         self.spechead = trans_spechead
         self.eps = eps
