@@ -56,8 +56,8 @@ class LSTM(nn.Module):
 
     def forward(self, features, **kwargs):
         predicted, _ = self.lstm(features)
-        predicted = self.scaling_layer(predicted)
-        return predicted, {}
+        log_predicted = self.scaling_layer(predicted)
+        return log_predicted.exp(), {'log_predicted': log_predicted}
 
 
 class Residual(nn.Module):
