@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import math
 import numpy as np
 import scipy
@@ -110,8 +111,8 @@ class L1(nn.Module):
         # stft_length_masks: (batch_size, max_time)
         # predicted, linear_tar: (batch_size, max_time, feat_dim)
 
-        src = predicted * stft_length_masks.unsqueeze(-1)
-        tar = linear_tar * stft_length_masks.unsqueeze(-1)
+        src = predicted.masked_select(stft_length_masks.unsqueeze(-1).bool())
+        tar = linear_tar.masked_select(stft_length_masks.unsqueeze(-1).bool())
 
         if self.log:
             l1 = self.fn((src + self.eps).log(), (tar + self.eps).log())
