@@ -168,10 +168,10 @@ def get_dataloader(args, config):
     dev_set = None
 
     def collate_fn(samples):
-        parse = [[samples[i][j] for i in range(len(samples))] for j in range(len(samples[0]))]
-        if len(samples[0]) == 1:
-            wavs = parse[0]
+        if type(samples[0]) is torch.Tensor:
+            wavs = samples
         else:
+            parse = [[samples[i][j] for i in range(len(samples))] for j in range(len(samples[0]))]
             wavs, channel3s = parse
         lengths = torch.LongTensor([len(s) for s in wavs])
         samples = pad_sequence(wavs, batch_first=True).transpose(-1, -2).contiguous()
