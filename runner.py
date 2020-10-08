@@ -219,7 +219,7 @@ class Runner():
                                 wav_clean = self.preprocessor.istft(linear_clean, phase_inp)
                                 wav_clean = torch.cat([wav_clean, wav_clean.new_zeros(wav_clean.size(0), max(lengths) - wav_clean.size(1))], dim=1)
                                 wav_noise = wavs[:, 0, :] - wav_clean
-                                wav_noisy = OnlineDataset.add_noise(channel3_wavs, wav_noise, list(range(-8, 8))) * self._get_length_masks(channel3_lengths)
+                                wav_noisy, scaled_noise = OnlineDataset.add_noise(channel3_wavs, wav_noise, list(range(-8, 8))) * self._get_length_masks(channel3_lengths)
                                 wavs = torch.stack([wav_noisy, channel3_wavs], dim=1)
                                 lengths = channel3_lengths
                                 _, feats_for_downstream, linear_inp, phase_inp, linear_tar, phase_tar = self.preprocessor(wavs)
