@@ -1,8 +1,10 @@
 import os
 import glob
 import math
+import copy
 import torch
 import random
+from functools import partial
 import numpy as np
 from tqdm import tqdm
 from torch.optim import Adam
@@ -10,12 +12,36 @@ from tensorboardX import SummaryWriter
 from downstream.solver import get_optimizer
 from joblib import Parallel, delayed
 from dataloader import OnlineDataset
+from utility.preprocessor import OnlinePreprocessor
 from evaluation import *
 from objective import *
 from utils import *
 
 OOM_RETRY_LIMIT = 10
 MAX_POSITIONS_LEN = 16000 * 50
+
+
+def logging(logger, step, tag, data, mode='scalar', preprocessor=None):
+    if type(data) is torch.Tensor:
+        data = data.detach().cpu()
+
+    if mode == 'scalar':
+        # data is a int or float
+        logger.add_scalar(tag, data, global_step=step)
+    elif mode == 'audio':
+        # data: (seqlen, )
+        assert preprocessor is not None
+        data = data / data.abs().max().item()
+        # log wavform
+        logger.add_audio(f'{tag}.wav', data.reshape(-1, 1), global_step=step, sample_rate=preprocessor._sample_rate)
+        # log log-linear-scale spectrogram
+        feat_config = OnlinePreprocessor.get_feat_config(feat_type='linear', log=True)
+        linear = preprocessor(data.reshape(1, 1, -1), [feat_config])[0]
+        figure = plot_spectrogram(linear)
+        logger.add_figure(f'{tag}.png', figure, global_step=step)
+    else:
+        raise NotImplementedError
+
 
 class Runner():
     ''' Handler for complete training and evaluation progress of downstream models '''
@@ -150,10 +176,12 @@ class Runner():
             eval_and_log()
         
         # start training
+        logging_temp = partial(logging, logger=self.log, preprocessor=copy.deepcopy(self.preprocessor).cpu())
         loss_sum = 0
         while self.global_step <= total_steps:
             for lengths, wavs, channel3_lengths, channel3_wavs in trainloader:
                 # wavs: (batch_size, channel, max_len)
+                eval_loggers = []
                 try:
                     if self.global_step > total_steps:
                         break
@@ -181,6 +209,11 @@ class Runner():
                             if self.args.pseudo_clean:
                                 linear_tar = linear_clean
                             else:
+                                # add logging for debug
+                                eval_loggers.append(partial(logging_temp, tag='original_noisy', data=wavs[0, 0, :], mode='audio'))
+                                eval_loggers.append(partial(logging_temp, tag='original_clean', data=wavs[0, 1, :], mode='audio'))
+                                eval_loggers.append(partial(logging_temp, tag='database_clean', data=channel3_wavs[0], mode='audio'))
+
                                 channel3_lengths = channel3_lengths.to(device=self.device)
                                 channel3_wavs = channel3_wavs.to(device=self.device)
                                 wav_clean = self.preprocessor.istft(linear_clean, phase_inp)
@@ -190,6 +223,11 @@ class Runner():
                                 wavs = torch.stack([wav_noisy, channel3_wavs], dim=1)
                                 lengths = channel3_lengths
                                 _, feats_for_downstream, linear_inp, phase_inp, linear_tar, phase_tar = self.preprocessor(wavs)
+
+                                # add logging for debug
+                                eval_loggers.append(partial(logging_temp, tag='pseudo_clean', data=wav_clean[0], mode='audio'))
+                                eval_loggers.append(partial(logging_temp, tag='pseudo_noise', data=wav_noise[0], mode='audio'))
+                                eval_loggers.append(partial(logging_temp, tag='pseudo_noisy', data=wav_noisy[0], mode='audio'))
 
                     stft_lengths = lengths // self.preprocessor._win_args['hop_length'] + 1
                     stft_length_masks = self._get_length_masks(stft_lengths)
@@ -237,6 +275,8 @@ class Runner():
 
                     # evaluate and save the best
                     if self.global_step % int(self.rconfig['eval_step']) == 0:
+                        for logger in eval_loggers:
+                            logger(step=self.global_step)
                         self.save_model()
                         eval_and_log()
 
@@ -304,7 +344,7 @@ class Runner():
                     elif self.args.from_rawfeature:
                         down_inp = feats_for_downstream
 
-                    predicted, model_results = self.downstream_model(down_inp, linears=linear_inp)
+                    predicted, model_results = self.downstream_model(features=down_inp, linears=linear_inp)
                     wav_predicted = self.preprocessor.istft(predicted, phase_inp)
                     wav_predicted = torch.cat([wav_predicted, wav_predicted.new_zeros(wav_predicted.size(0), max(lengths) - wav_predicted.size(1))], dim=1)
                     length_masks = self._get_length_masks(lengths)
