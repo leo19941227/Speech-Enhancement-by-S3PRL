@@ -135,7 +135,7 @@ class Runner():
 
     def train(self, trainloader, subtrainloader=None, devloader=None, testloader=None):
         total_steps = self.rconfig['total_step']
-        pbar = tqdm(total=total_steps)
+        pbar = tqdm(total=total_steps, dynamic_ncols=True)
         pbar.n = self.global_step - 1
 
         variables = locals()
@@ -317,7 +317,7 @@ class Runner():
         loss_sum = 0
         oom_counter = 0
         scores_sum = torch.zeros(len(self.metrics))
-        for indice, (lengths, wavs, _, _) in enumerate(tqdm(dataloader, desc="Iteration")):
+        for indice, (lengths, wavs, _, _) in enumerate(tqdm(dataloader, desc="Iteration", dynamic_ncols=True)):
             with torch.no_grad():
                 try:
                     lengths = lengths.to(device=self.device)
