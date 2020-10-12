@@ -54,6 +54,7 @@ def get_downstream_args():
     parser.add_argument('--cpu', action='store_true', help='Disable GPU training.')
     parser.add_argument('--wandb', action='store_true')
     parser.add_argument('--eval_init', action='store_true')
+    parser.add_argument('--no_metric', action='store_true')
 
     # parse
     args = parser.parse_args()

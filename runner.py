@@ -354,6 +354,14 @@ class Runner():
 
                     wav_predicted = masked_normalize_decibel(wav_predicted, wav_tar, length_masks)
 
+                    if indice in sample_indices:
+                        noisy_wavs.append(wav_inp[0].detach().cpu())
+                        clean_wavs.append(wav_tar[0].detach().cpu())
+                        enhanced_wavs.append(wav_predicted[0].detach().cpu())
+
+                    if self.args.no_metric:
+                        continue
+
                     # split batch into list of utterances and duplicate N_METRICS times
                     batch_size = len(wav_predicted)
                     wav_predicted_list = wav_predicted.detach().cpu().chunk(batch_size) * len(self.metrics)
@@ -372,11 +380,6 @@ class Runner():
                     
                     scores = torch.FloatTensor(scores).view(len(self.metrics), batch_size).mean(dim=1)
                     scores_sum += scores
-
-                    if indice in sample_indices:
-                        noisy_wavs.append(wav_inp[0].detach().cpu())
-                        clean_wavs.append(wav_tar[0].detach().cpu())
-                        enhanced_wavs.append(wav_predicted[0].detach().cpu())
 
                 except RuntimeError as e:
                     if not 'CUDA out of memory' in str(e): raise
