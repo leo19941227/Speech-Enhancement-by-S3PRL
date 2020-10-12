@@ -205,9 +205,9 @@ class Runner():
 
                     if self.args.pseudo_clean or self.args.pseudo_noise:
                         with torch.no_grad():
-                            linear_clean, _ = self.upstream_model.SpecHead(features)
+                            linear_predicted, _ = self.upstream_model.SpecHead(features)
                             if self.args.pseudo_clean:
-                                linear_tar = linear_clean
+                                linear_tar = linear_predicted
                             else:
                                 # add logging for debug
                                 eval_loggers.append(partial(logging_temp, tag='original_noisy', data=wavs[0, 0, :], mode='audio'))
@@ -216,16 +216,16 @@ class Runner():
 
                                 channel3_lengths = channel3_lengths.to(device=self.device)
                                 channel3_wavs = channel3_wavs.to(device=self.device)
-                                wav_clean = self.preprocessor.istft(linear_clean, phase_inp)
-                                wav_clean = torch.cat([wav_clean, wav_clean.new_zeros(wav_clean.size(0), max(lengths) - wav_clean.size(1))], dim=1)
-                                wav_noise = wavs[:, 0, :] - wav_clean
-                                wav_noisy, scaled_noise = OnlineDataset.add_noise(channel3_wavs, wav_noise, list(range(-8, 8))) * self._get_length_masks(channel3_lengths)
-                                wavs = torch.stack([wav_noisy, channel3_wavs], dim=1)
+                                wav_noise = self.preprocessor.istft(linear_predicted, phase_inp)
+                                wav_noisy, scaled_noise = OnlineDataset.add_noise(channel3_wavs, wav_noise, trainloader.dataset.snrs)
+
                                 lengths = channel3_lengths
+                                length_masks = self._get_length_masks(channel3_lengths)
+                                wav_noisy, scaled_noise = wav_noisy * length_masks, scaled_noise * length_masks
+                                wavs = torch.stack([wav_noisy, channel3_wavs], dim=1)
                                 _, feats_for_downstream, linear_inp, phase_inp, linear_tar, phase_tar = self.preprocessor(wavs)
 
                                 # add logging for debug
-                                eval_loggers.append(partial(logging_temp, tag='pseudo_clean', data=wav_clean[0], mode='audio'))
                                 eval_loggers.append(partial(logging_temp, tag='pseudo_noise', data=wav_noise[0], mode='audio'))
                                 eval_loggers.append(partial(logging_temp, tag='pseudo_noisy', data=wav_noisy[0], mode='audio'))
 
