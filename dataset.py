@@ -7,7 +7,6 @@ import torch
 import torchaudio
 from torch.utils.data import Dataset
 from librosa.util import find_files
-from dataloader import OnlineDataset
 
 
 class PseudoDataset(Dataset):
@@ -25,19 +24,6 @@ class PseudoDataset(Dataset):
 class OnlineDatasetWrapper(OnlineDataset):
     def __init__(self, **kwargs):
         super(OnlineDatasetWrapper, self).__init__(**kwargs)
-
-    def get_subset(self, ratio=0.2, sample_seed=None):
-        subset = copy.deepcopy(self)
-        clean_pths = sorted(subset.filepths)
-        subset_num = round(len(clean_pths) * ratio)
-
-        if sample_seed is None:
-            sample_seed = 0
-        random.seed(sample_seed)
-        clean_pths = random.sample(clean_pths, subset_num)
-
-        subset.filepths = clean_pths
-        return subset
 
 
 class NoisyCleanDataset(Dataset):

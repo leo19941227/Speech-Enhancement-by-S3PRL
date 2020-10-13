@@ -18,7 +18,8 @@ from downstream.model import dummy_upstream
 from runner import Runner
 from model import *
 from utils import *
-from dataset import PseudoDataset, NoisyCleanDataset, OnlineDatasetWrapper
+from dataset import PseudoDataset, NoisyCleanDataset
+from dataloader import OnlineDataset
 
 
 def get_downstream_args():
@@ -26,8 +27,8 @@ def get_downstream_args():
     parser.add_argument('--resume', help='Specify the downstream checkpoint path for continual training')
 
     parser.add_argument('--name', help='Name of current experiment.')
-    parser.add_argument('--trainset', default='OnlineDatasetWrapper')
-    parser.add_argument('--testset', default='OnlineDatasetWrapper')
+    parser.add_argument('--trainset', default='OnlineDataset')
+    parser.add_argument('--testset', default='OnlineDataset')
     parser.add_argument('--n_jobs', default=12, type=int)
 
     # upstream settings
