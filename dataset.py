@@ -23,33 +23,19 @@ class PseudoDataset(Dataset):
 
 
 class OnlineDatasetWrapper(OnlineDataset):
-    def __init__(self, sample_num=None, fileroot=None, filelist=None, seed=1227, **kwargs):
+    def __init__(self, **kwargs):
         super(OnlineDatasetWrapper, self).__init__(**kwargs)
-        random.seed(seed)
-
-        if fileroot is not None and filelist is not None:
-            with open(filelist, 'r') as handle:
-                self.filepths = [f'{fileroot}/{line[:-1]}' for line in handle.readlines()]
-
-        self.filepths = sorted(self.filepths)
-        self.noise_wavpths = sorted(self.noise_wavpths)
-
-        if sample_num is not None:
-            if len(self.filepths) >= sample_num:
-                self.filepths = self.filepths[:sample_num]
-            else:
-                times = sample_num // len(self.filepths) + 1
-                self.filepths = (self.filepths * times)[:sample_num]
 
     def get_subset(self, ratio=0.2, sample_seed=None):
         subset = copy.deepcopy(self)
         clean_pths = sorted(subset.filepths)
         subset_num = round(len(clean_pths) * ratio)
+
         if sample_seed is None:
-            clean_pths = clean_pths[:subset_num]
-        else:
-            random.seed(sample_seed)
-            clean_pths = random.sample(clean_pths, subset_num)
+            sample_seed = 0
+        random.seed(sample_seed)
+        clean_pths = random.sample(clean_pths, subset_num)
+
         subset.filepths = clean_pths
         return subset
 
