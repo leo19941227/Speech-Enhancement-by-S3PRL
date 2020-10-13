@@ -82,14 +82,13 @@ class Runner():
                 self.upstream_model.train()
             else:
                 self.upstream_model.eval()
-            if self.args.downstream != 'Mockingjay':
-                self.optimizer = Adam(self.downstream_model.parameters(), lr=float(self.rconfig['learning_rate']), betas=(0.9, 0.999))
-            else:
-                self.optimizer = get_optimizer(params=list(self.downstream_model.named_parameters()),
-                                               lr=float(self.rconfig['learning_rate']), 
-                                               warmup_proportion=float(self.rconfig['warmup_proportion']),
-                                               training_steps=int(self.rconfig['total_step']))
-        
+
+            # self.optimizer = Adam(self.downstream_model.parameters(), lr=float(self.rconfig['learning_rate']), betas=(0.9, 0.999))
+            self.optimizer = get_optimizer(params=list(self.downstream_model.named_parameters()),
+                                            lr=float(self.rconfig['learning_rate']), 
+                                            warmup_proportion=float(self.rconfig['warmup_proportion']),
+                                            training_steps=int(self.rconfig['total_step']))
+
         self.downstream_model.train()
         if self.args.resume is not None:
             self.load_model(self.args.resume)
