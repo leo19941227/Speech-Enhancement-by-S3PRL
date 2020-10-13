@@ -21,11 +21,6 @@ class PseudoDataset(Dataset):
         # return: (time, 2)
 
 
-class OnlineDatasetWrapper(OnlineDataset):
-    def __init__(self, **kwargs):
-        super(OnlineDatasetWrapper, self).__init__(**kwargs)
-
-
 class NoisyCleanDataset(Dataset):
     # This dataset identify the clean/noisy pair by the regex pattern in the filename
     # Each directory in roots should contain two sub-directories: clean & noisy

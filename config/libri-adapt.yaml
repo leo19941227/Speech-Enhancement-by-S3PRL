@@ -62,13 +62,13 @@ NoisyCleanDataset_test:
     '/home/leo/d/datasets/DNS-Challenge/datasets/test_set/synthetic/no_reverb',
   ]
 
-OnlineDatasetWrapper_train:
+OnlineDataset_train:
   # dataset
   roots: [
-    '../datasets/LibriSpeech/train-clean-100',
+    # '../datasets/LibriSpeech/train-clean-100',
   ]
   fileroot: '../datasets/LibriSpeech/'
-  filelist: 'libri-test.txt'
+  filelist: 'libri-adapt.txt'
   sample_rate: 16000
   # Hz, all utterances prepared in roots should be in the same
   # sample rate currently, can implement resampling in the future
@@ -84,12 +84,13 @@ OnlineDatasetWrapper_train:
   snrs: [-8, -6, -4, -2, 0, 2, 4, 6, 8]
   # sample a noise level for each noise addition
   channel3: '../datasets/LibriSpeech/train-clean-360'
+  deterministic_mapping: True
   sample_num: 10000
 
-OnlineDatasetWrapper_test:
+OnlineDataset_test:
   # dataset
   roots: [
-    '../datasets/LibriSpeech/test-clean',
+    # '../datasets/LibriSpeech/test-clean',
   ]
   fileroot: '../datasets/LibriSpeech/'
   filelist: 'libri-test.txt'
@@ -107,4 +108,5 @@ OnlineDatasetWrapper_test:
   noise_type: '../datasets/noise_data/Nonspeech_noclass'
   snrs: [-8, -6, -4, -2, 0, 2, 4, 6, 8]
   # sample a noise level for each noise addition
+  deterministic_mapping: True
   sample_num: 1200
