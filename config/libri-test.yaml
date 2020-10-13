@@ -84,7 +84,7 @@ OnlineDataset_train:
   snrs: [-8, -6, -4, -2, 0, 2, 4, 6, 8]
   # sample a noise level for each noise addition
   channel3: '../datasets/LibriSpeech/train-clean-360'
-  deterministic_mapping: True
+  deterministic_mapping: False
   sample_num: 10000
 
 OnlineDataset_test:
@@ -108,5 +108,5 @@ OnlineDataset_test:
   noise_type: '../datasets/noise_data/Nonspeech_noclass'
   snrs: [-8, -6, -4, -2, 0, 2, 4, 6, 8]
   # sample a noise level for each noise addition
-  deterministic_mapping: True
+  deterministic_mapping: False
   sample_num: 1200
