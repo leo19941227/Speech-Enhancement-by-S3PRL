@@ -144,7 +144,7 @@ class Runner():
                           for split_name in eval_splits]
         # eval_settings: [(split_name, split_loader, split_current_best_metrics), ...]
         
-        def eval_and_log():
+        def eval_and_log(media=False):
             for split_name, split_loader, metrics_best in eval_settings:
                 if split_loader is None:
                     continue
@@ -153,23 +153,25 @@ class Runner():
                 self.log.add_scalar(f'{split_name}_loss', loss.item(), self.global_step)
                 for score, metric_name in zip(scores, eval_metrics):
                     self.log.add_scalar(f'{split_name}_{metric_name}', score.item(), self.global_step)
-                for idx, wavs in enumerate(zip(*eval_wavs)):
-                    for tag, wav in zip(['noisy', 'clean', 'enhanced'], wavs):
-                        marker = f'{split_name}-{tag}-{idx}'
-                        
-                        # log audio
-                        self.log.add_audio(f'{marker}.wav', wav.reshape(-1, 1), global_step=self.global_step,
-                                           sample_rate=self.preprocessor._sample_rate)
-
-                        # log spectrogram
-                        feat = {'feat_type': 'linear', 'log': True}
-                        linear = self.preprocessor(wav.reshape(1, 1, -1).to(self.device), [feat])[0]
-                        fig = plot_spectrogram(linear)
-                        self.log.add_figure(f'{marker}.png', fig, global_step=self.global_step)
 
                 if (scores > metrics_best).sum() > 0:
                     metrics_best.data = torch.max(scores, metrics_best).data
                     self.save_model(split_name)
+
+                if media:
+                    for idx, wavs in enumerate(zip(*eval_wavs)):
+                        for tag, wav in zip(['noisy', 'clean', 'enhanced'], wavs):
+                            marker = f'{split_name}-{tag}-{idx}'
+                            
+                            # log audio
+                            self.log.add_audio(f'{marker}.wav', wav.reshape(-1, 1), global_step=self.global_step,
+                                            sample_rate=self.preprocessor._sample_rate)
+
+                            # log spectrogram
+                            feat = {'feat_type': 'linear', 'log': True}
+                            linear = self.preprocessor(wav.reshape(1, 1, -1).to(self.device), [feat])[0]
+                            fig = plot_spectrogram(linear)
+                            self.log.add_figure(f'{marker}.png', fig, global_step=self.global_step)
 
         if self.args.eval_init:
             eval_and_log()
@@ -274,10 +276,14 @@ class Runner():
 
                     # evaluate and save the best
                     if self.global_step % int(self.rconfig['eval_step']) == 0:
-                        for logger in eval_loggers:
-                            logger(step=self.global_step)
                         self.save_model()
-                        eval_and_log()
+
+                        # log wav and images
+                        media = self.global_step % int(self.rconfig['media_step']) == 0
+                        eval_and_log(media)
+                        if media:
+                            for logger in eval_loggers:
+                                logger(step=self.global_step)
 
                     del model_results
                     del objective_results
