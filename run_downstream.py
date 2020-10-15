@@ -57,6 +57,8 @@ def get_downstream_args():
     parser.add_argument('--eval_init', action='store_true')
     parser.add_argument('--no_metric', action='store_true')
 
+    parser.add_argument('--active_sampling', action='store_true')
+
     # parse
     args = parser.parse_args()
     if args.resume is None:

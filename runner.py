@@ -1,4 +1,5 @@
 import os
+import time
 import glob
 import math
 import copy
@@ -16,9 +17,43 @@ from utility.preprocessor import OnlinePreprocessor
 from evaluation import *
 from objective import *
 from utils import *
+from torch.utils.data import DataLoader
+from torch.nn.utils.rnn import pad_sequence
+import multiprocessing as mp
 
 OOM_RETRY_LIMIT = 10
 MAX_POSITIONS_LEN = 16000 * 50
+
+
+def collate_fn(samples):
+    if type(samples[0]) is torch.Tensor:
+        wavs = samples
+    else:
+        parse = [[samples[i][j] for i in range(len(samples))] for j in range(len(samples[0]))]
+        wavs, channel3s = parse
+    lengths = torch.LongTensor([len(s) for s in wavs])
+    samples = pad_sequence(wavs, batch_first=True).transpose(-1, -2).contiguous()
+    channel3_lengths = torch.LongTensor([len(s) for s in channel3s]) if 'channel3s' in locals() else lengths
+    channel3_samples = pad_sequence(channel3s, batch_first=True) if 'channel3s' in locals() else samples[:, 0, :]
+    return lengths, samples, channel3_lengths, channel3_samples
+
+def get_dataloader(args, config):
+    train_set = eval(args.trainset)(**config[f'{args.trainset}_train'])
+    dlconf = config['dataloader']
+    train_loader = DataLoader(train_set, batch_size=dlconf['batch_size'], shuffle=True, num_workers=args.n_jobs, collate_fn=collate_fn)
+    return train_loader
+
+def find_active_samples(handshake, active_samples, args, config, model, preprocessor, gpu2=1):
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu2)
+    model = model.cuda()
+    preprocessor = preprocessor.cuda()
+    trainloader = get_dataloader(args, config)
+
+    pivot = 0
+    for lengths, wavs, channel3_lengths, channel3_wavs in trainloader:
+        handshake.put(0)
+        active_samples[pivot] = torch.randn(16000, 2)
+        pivot = (pivot + 1) % len(active_samples)
 
 
 def logging(logger, step, tag, data, mode='scalar', preprocessor=None):
@@ -68,6 +103,10 @@ class Runner():
 
         assert self.metrics is not None
         assert self.criterion is not None
+
+        self.ctx = mp.get_context("spawn")
+        self.manager = self.ctx.Manager()
+        self.active_samples = self.manager.list(range(self.config['runner']['active_num']))
 
     def set_model(self):
         if self.args.fine_tune:
@@ -132,6 +171,25 @@ class Runner():
         length_masks = (ascending < lengths.unsqueeze(-1)).long()
         return length_masks
 
+    def _active_sample(self):
+        active_samples = [sample for sample in self.active_samples if type(sample) is torch.Tensor]
+
+        # kill existing active sampler
+        if hasattr(self, 'child'):
+            self.child.terminate()
+
+        # create new active sampler based on current model
+        handshake = self.ctx.Queue()
+        self.active_samples = self.manager.list(range(self.config['runner']['active_num']))
+        self.child = self.ctx.Process(
+            target=find_active_samples,
+            args=(handshake, self.active_samples, self.args, self.config, copy.deepcopy(self.downstream_model).cpu(), copy.deepcopy(self.preprocessor).cpu())
+        )
+        self.child.start()
+        handshake.get()
+
+        return active_samples
+
     def train(self, trainloader, subtrainloader=None, devloader=None, testloader=None):
         total_steps = self.rconfig['total_step']
         pbar = tqdm(total=total_steps, dynamic_ncols=True)
@@ -175,6 +233,9 @@ class Runner():
 
         if self.args.eval_init:
             eval_and_log()
+
+        if self.args.active_sampling:
+            active_samples = self._active_sample()
         
         # start training
         logging_temp = partial(logging, logger=self.log, preprocessor=copy.deepcopy(self.preprocessor).cpu())
@@ -285,6 +346,9 @@ class Runner():
                             for logger in eval_loggers:
                                 logger(step=self.global_step)
 
+                    if self.args.active_sampling and self.global_step % int(self.rconfig['active_step']) == 0:
+                        active_samples = self._active_sample()
+
                     del model_results
                     del objective_results
                     torch.cuda.empty_cache()
@@ -297,6 +361,8 @@ class Runner():
 
                 pbar.update(1)
                 self.global_step += 1
+            
+            self.child.terminate()
 
         pbar.close()
         self.log.close()
