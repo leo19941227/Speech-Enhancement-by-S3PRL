@@ -3,10 +3,15 @@ import re
 import glob
 import copy
 import random
+
 import torch
+import librosa
 import torchaudio
-from torch.utils.data import Dataset
 from librosa.util import find_files
+from torch.utils.data import Dataset
+from torch.nn.utils.rnn import pad_sequence
+
+ACTIVE_BUFFER_NUM = 4
 
 
 class PseudoDataset(Dataset):
@@ -19,6 +24,156 @@ class PseudoDataset(Dataset):
     def __len__(self):
         return len(self.data)
         # return: (time, 2)
+
+
+def filestrs2list(filestrs, fileroot=None, sample_num_per_str=0, select_sampled=False, **kwargs):
+    print(f'[filestrs2list] - Parsing filestrs: {filestrs}.')
+
+    if type(filestrs) is not list:
+        filestrs = [filestrs]
+
+    all_files = []
+    for filestr in filestrs:
+        if os.path.isdir(filestr):
+            all_files += sorted(find_files(filestr))
+        elif os.path.isfile(filestr):
+            with open(filestr, 'r') as handle:
+                all_files += sorted([f'{fileroot}/{line[:-1]}' for line in handle.readlines()])
+        else:
+            files = sorted(glob.glob(filestr))
+            random.seed(0)
+            random.shuffle(files)
+            files = files[:sample_num_per_str] if select_sampled else files[sample_num_per_str:]
+            all_files += sorted(files)
+    all_files = sorted(all_files)
+
+    print(f'[filestrs2list] - Complete parsing: {len(all_files)} files found.')
+    return all_files
+
+
+def add_noise(speech, noise, snrs, eps=1e-10):
+    # speech, noise: (batch_size, seqlen)
+    # snrs: (batch_size, )
+    if speech.size(-1) >= noise.size(-1):
+        times = speech.size(-1) // noise.size(-1)
+        remainder = speech.size(-1) % noise.size(-1)
+        noise_expanded = noise.unsqueeze(-2).expand(-1, times, -1).reshape(speech.size(0), -1)
+        noise = torch.cat([noise_expanded, noise[:, :remainder]], dim=-1)
+    else:
+        noise = noise[:, :speech.size(-1)]
+    assert noise.size(-1) == speech.size(-1)
+
+    snr_exp = 10.0 ** (snrs / 10.0)
+    speech_power = speech.pow(2).sum(dim=-1, keepdim=True)
+    noise_power = noise.pow(2).sum(dim=-1, keepdim=True)
+    scalar = (speech_power / (snr_exp * noise_power + eps)).pow(0.5)
+    scaled_noise = scalar * noise
+    noisy = speech + scaled_noise
+
+    assert torch.isnan(noisy).sum() == 0 and torch.isinf(noisy).sum() == 0 
+    return noisy, scaled_noise
+
+
+class OnlineDataset(Dataset):
+    def __init__(self, speech, noise, sample_rate, max_time, min_time=0,
+                 target_level=-25, snrs=[3], infinite=False,
+                 pseudo_modes=None, pseudo_clean=None, pseudo_noise=None,
+                 seed=0, eps=1e-8, **kwargs):
+        self.sample_rate = sample_rate
+        self.max_time = max_time
+        self.min_time = min_time
+        self.target_level = target_level
+        self.infinite = infinite
+        self.pseudo_modes = pseudo_modes
+        self.pseudo_clean = pseudo_clean
+        self.pseudo_noise = pseudo_noise
+        self.eps = eps
+
+        self.filepths = filestrs2list(**speech)
+        self.all_noises = filestrs2list(**noise)
+        self.all_snrs = snrs
+
+        random.seed(0)
+        self.fixed_noises = random.choices(self.all_noises, k=len(self.filepths))
+
+        random.seed(0)
+        self.fixed_snrs = random.choices(self.all_snrs, k=len(self.filepths))
+
+        # This mapping directly decide how many data points are in the dataset
+        self.id_mapping = list(range(len(self.filepths)))
+
+    def normalize_wav_decibel(self, audio):
+        '''Normalize the signal to the target level'''
+        rms = audio.pow(2).mean().pow(0.5)
+        scalar = (10 ** (self.target_level / 20)) / (rms + 1e-10)
+        audio = audio * scalar
+        return audio
+
+    def load_data(self, wav_path):
+        wav, sr = librosa.load(wav_path, sr=self.sample_rate)
+        wav = torch.FloatTensor(wav)
+        
+        maxpoints = int(sr / 1000) * self.max_time
+        minpoints = int(sr / 1000) * self.min_time
+        if len(wav) < minpoints:
+            times = minpoints // len(wav) + 1
+            wav = wav.unsqueeze(0).expand(times, -1).reshape(-1)
+        if len(wav) > maxpoints:
+            wav = wav[:maxpoints]
+
+        return wav
+
+    def __getitem__(self, idx):
+        idx = self.id_mapping[idx]
+        if self.pseudo_modes is not None:
+            case = random.choice(self.pseudo_modes)
+
+        # speech
+        speech_pth = self.filepths[idx]
+        speech = self.load_data(speech_pth)
+        if 'case' in locals() and (case == 2 or case == 3) and self.pseudo_clean is not None:
+            speech = random.choice(self.pseudo_clean)
+        speech = self.normalize_wav_decibel(speech)
+
+        # noise
+        noise_pth = random.choice(self.all_noises) if self.infinite else self.fixed_noises[idx]
+        noise = self.load_data(noise_pth)
+        if 'case' in locals() and (case == 0 or case == 3) and self.pseudo_noise is not None:
+            noise = random.choice(self.pseudo_noise)
+        noise = self.normalize_wav_decibel(noise)
+
+        # noisy
+        snr = random.choice(self.all_snrs) if self.infinite else self.fixed_snrs[idx]
+        noisy, scaled_noise = add_noise(speech.unsqueeze(0), noise.unsqueeze(0), torch.ones(1) * snr, self.eps)
+        noisy, scaled_noise = noisy.squeeze(0), scaled_noise.squeeze(0)
+
+        wavs = torch.stack([noisy, speech, scaled_noise], dim=-1)
+        if 'case' in locals():
+            return wavs, case
+        return wavs
+
+    def __len__(self):
+        return len(self.id_mapping)
+
+    def collate_fn(self, samples):
+        if type(samples[0]) is torch.Tensor:
+            wavs = samples
+        else:
+            wavs, cases = [[samples[i][j] for i in range(len(samples))] for j in range(len(samples[0]))]
+
+        lengths = torch.LongTensor([len(s) for s in wavs])
+        wavs = pad_sequence(wavs, batch_first=True).transpose(-1, -2).contiguous()
+        if 'cases' not in locals():
+            return lengths, wavs
+        return lengths, wavs, torch.LongTensor(cases)
+
+    def get_subset(self, n_file=100):
+        subset = copy.deepcopy(self)
+        subset.infinite = False
+        random.seed(0)
+        random.shuffle(subset.id_mapping)
+        subset.id_mapping = subset.id_mapping[:n_file]
+        return subset
 
 
 class NoisyCleanDataset(Dataset):

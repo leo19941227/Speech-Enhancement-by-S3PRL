@@ -32,7 +32,7 @@ def masked_normalize_decibel(audio, target, length_masks, eps=1e-8):
     # audio: (batch_size, max_time)
     # length_masks: (batch_size, max_time)
 
-    if type(target) is float:
+    if type(target) is float or type(target) is int:
         # target: fixed decibel level
         target = torch.ones(len(audio)).to(device=audio.device) * target
     elif type(target) is torch.Tensor and target.dim() > 1:
