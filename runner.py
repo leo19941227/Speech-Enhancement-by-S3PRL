@@ -271,6 +271,7 @@ class Runner():
 
         # start training
         loss_sum = 0
+        active_samples = defaultdict(list)
         while self.global_step <= total_steps:
             for lengths, wavs in trainloader:
                 # wavs: (batch_size, channel, max_len)
@@ -282,6 +283,19 @@ class Runner():
                     if self.args.active_sampling:
                         if not hasattr(self, 'child') or not self.child.is_alive():
                             self._start_active_sampler()
+
+                        if self.global_step % int(self.rconfig['active_collect_step']) == 0:
+                            samples = self._collect_active_samples()
+                            for key in samples.keys():
+                                active_samples[key] += samples[key]
+
+                        pairs = torch.LongTensor([[i, w] for i, w in enumerate(self.rconfig['active_src_weights']) if len(active_samples[i]) > 0])
+                        if len(pairs.view(-1)) > 0:
+                            keys = pairs[:, 0].tolist()
+                            weights = pairs[:, 1].tolist()
+                            types = random.choices(keys, weights, k=len(wavs))
+                            wavs = [random.choice(active_samples[t])['wavs'] for t in types]
+                            lengths, wavs = trainloader.dataset.collate_fn(wavs)
 
                     wavs = wavs.to(device=self.device)
                     lengths = lengths.to(device=self.device)
@@ -342,11 +356,9 @@ class Runner():
                         for logger in train_loggers:
                             logger(step=self.global_step)
 
-                    if self.args.active_sampling and self.global_step % int(self.rconfig['active_collect_step']) == 0:
-                        active_samples = self._collect_active_samples()
-
                     if self.args.active_sampling and self.global_step % int(self.rconfig['active_refresh_step']) == 0:
                         self._kill_active_sampler()
+                        active_samples = defaultdict(list)
 
                     # evaluate and save the best
                     if self.global_step % int(self.rconfig['eval_step']) == 0:

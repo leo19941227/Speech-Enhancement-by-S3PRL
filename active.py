@@ -169,10 +169,12 @@ def find_active_samples(parent_msg,
             match_scores = matching(query_scores, scores)
             is_match = thresholding(match_scores).nonzero().view(-1)
 
+            wavs = wavs.detach().cpu()
+            match_scores = match_scores.detach().cpu()
             for idx in is_match:
                 current_buffers[cases[idx].item()].append({
-                    'wavs': wavs[idx][:lengths[idx].cpu(), :].detach().cpu(),
-                    'match_score': match_scores[idx].detach().cpu(),
+                    'wavs': wavs[idx, :, :lengths[idx].cpu()].transpose(-1, -2).contiguous(),
+                    'match_score': match_scores[idx],
                 })
 
             try:
