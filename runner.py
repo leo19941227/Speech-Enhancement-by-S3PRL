@@ -369,6 +369,10 @@ class Runner():
             if self.args.active_sampling:
                 self.child.terminate()
 
+        if hasattr(self, 'child') and self.child.is_alive():
+            self.child.terminate()
+            self.child.join()
+
         pbar.close()
         self.log.close()
 
