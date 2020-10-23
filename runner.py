@@ -479,3 +479,7 @@ class Runner():
         torch.cuda.empty_cache()
 
         return loss_avg, scores_avg, noisy_wavs, clean_wavs, enhanced_wavs
+
+    
+    def test(self):
+        print('tested')

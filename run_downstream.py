@@ -70,6 +70,8 @@ def get_downstream_args():
     parser.add_argument('--active_sampling', action='store_true')
     parser.add_argument('--sampler_device', type=int)
 
+    parser.add_argument('--test', action='store_true')
+
     # parse
     args = parser.parse_args()
     if args.resume is None:
@@ -119,7 +121,10 @@ def get_preprocessor(args, config):
 
     if args.dckpt != '':
         downstream_config = torch.load(args.dckpt, map_location='cpu')['Settings']['Config']
-        downstream_feat = downstream_config['online']['input']
+        if 'online' in downstream_config:
+            downstream_feat = downstream_config['online']['input']
+        else:
+            downstream_feat = downstream_config['preprocessor']['baseline']
     else:
         downstream_feat = config['preprocessor']['baseline']
 
@@ -192,14 +197,21 @@ def get_downstream_model(args, input_dim, output_dim, config):
         dckpt = torch.load(args.dckpt, map_location='cpu')
         model_config = {}
         if args.downstream != 'Mockingjay':
-            model_config = dckpt['Settings']['Config']['small_model']['model']
+            dconfig = dckpt['Settings']['Config']
+            if 'small_model' in dconfig:
+                model_config = dconfig['small_model']['model']
+            else:
+                model_config = dconfig['model'][dckpt['Settings']['Paras'].downstream]
 
     configs = vars(args)
     configs.update(model_config)
     model = eval(args.downstream)(input_size=input_dim, output_size=output_dim, **configs)
 
     if args.dckpt != '' and args.downstream != 'Mockingjay':
-        state_dict = {'.'.join(key.split('.')[1:]): value for key, value in dckpt['SmallModel'].items()}
+        if 'SmallModel' in dckpt:
+            state_dict = {'.'.join(key.split('.')[1:]): value for key, value in dckpt['SmallModel'].items()}
+        else:
+            state_dict = dckpt['Downstream']
         model.load_state_dict(state_dict)
     return model
 
@@ -241,7 +253,6 @@ def main():
     downstream_inpdim = downstream_feat_dim if (args.from_rawfeature or args.from_waveform) else upstream_model.out_dim
     downstream_model = get_downstream_model(args, downstream_inpdim, tar_linear_dim, config)
 
-    # train
     runner = Runner(args=args,
                     config=config,
                     preprocessor=preprocessor,
@@ -250,7 +261,11 @@ def main():
                     downstream=downstream_model,
                     expdir=expdir)
     runner.set_model()
-    runner.train(train_loader, *eval_loaders)
+
+    if args.test:
+        runner.test()
+    else:
+        runner.train(train_loader, *eval_loaders)
 
 
 if __name__ == '__main__':
