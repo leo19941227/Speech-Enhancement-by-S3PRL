@@ -11,6 +11,7 @@ from collections import defaultdict
 import torch
 import numpy as np
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
 from torch.optim import Adam
 from tensorboardX import SummaryWriter
@@ -487,6 +488,54 @@ class Runner():
         print(f'[Runner evaluate]: loss {loss_avg}, scores {scores_avg}')
         return loss_avg, scores_avg, noisy_wavs, clean_wavs, enhanced_wavs
 
-    
-    def test(self):
-        print('tested')
+
+    def test_gradient(self):
+        from ipdb import set_trace
+
+        self._build_pseudo_wavs()
+
+        query_set = eval(self.args.trainset)(
+            **self.config[f'{self.args.trainset}_train'],
+            pseudo_modes=[3],
+            pseudo_clean=self.pseudo_clean,
+            pseudo_noise=self.pseudo_noise,
+        )
+        query_loader = iter(DataLoader(
+            query_set, batch_size=1, shuffle=True,
+            num_workers=self.args.n_jobs, collate_fn=query_set.collate_fn
+        ))
+
+        train_set = eval(self.args.trainset)(
+            **self.config[f'{self.args.trainset}_train'],
+            pseudo_modes=list(range(ACTIVE_BUFFER_NUM)),
+            pseudo_clean=self.pseudo_clean,
+            pseudo_noise=self.pseudo_noise,
+        )
+        train_loader = iter(DataLoader(
+            train_set, batch_size=1, shuffle=True,
+            num_workers=self.args.n_jobs, collate_fn=train_set.collate_fn
+        ))
+
+        similarities = defaultdict(list)
+        for i in tqdm(range(10000), dynamic_ncols=True):
+            query_lengths, query_wavs, _ = next(query_loader)
+            train_lengths, train_wavs, cases = next(train_loader)
+
+            if query_wavs.shape == train_wavs.shape and torch.allclose(query_wavs, train_wavs):
+                print('Skip when qeury_wavs == train_wavs')
+                continue
+
+            query_score = self.scoring_tmp(query_lengths.to(self.device), query_wavs.to(self.device))
+            train_score = self.scoring_tmp(train_lengths.to(self.device), train_wavs.to(self.device))
+
+            query_score_norm = query_score / (query_score.pow(2).sum(dim=-1).pow(0.5) + self.eps)
+            train_score_norm = train_score / (train_score.pow(2).sum(dim=-1).pow(0.5) + self.eps)
+
+            similarity = (query_score_norm * train_score_norm).sum(dim=-1).view(-1)
+            for sim, case in zip(similarity, cases):
+                similarities[case.item()].append(sim.item())
+
+        plt.figure()
+        sims = [similarities[i] for i in range(4)]
+        plt.boxplot(sims)
+        plt.savefig(f'{self.expdir}/sim_box.png')
