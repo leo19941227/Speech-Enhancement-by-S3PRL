@@ -89,6 +89,8 @@ class Runner():
         self.parent_msg = self.ctx.Queue()
         self.child_msg = self.ctx.Queue()
         self.sampler_buffers = self.manager.dict()
+        self.scoring_tmp = partial(scoring, self.args, self.config, self.preprocessor,
+                                   self.downstream_model, self.criterion, self.ascending)
 
 
     def set_model(self):
@@ -215,6 +217,26 @@ class Runner():
             linear_predicted, _ = self.upstream_model2.SpecHead(features)
         return self._decode_wav(linear_predicted, *args)
 
+    
+    def _build_pseudo_wavs(self):
+        recordset = eval(self.args.recordset)(**self.config[f'{self.args.recordset}_record'])
+        lengths, wavs = next(iter(DataLoader(recordset, batch_size=recordset.__len__(), shuffle=False, num_workers=0, collate_fn=recordset.collate_fn)))
+        self.logging(step=1, tag='record/noisy', data=wavs[:, 0, :], mode='audio')
+        self.logging(step=1, tag='record/clean', data=wavs[:, 1, :], mode='audio')
+        self.logging(step=1, tag='record/noise', data=wavs[:, 2, :], mode='audio')
+
+        wavs = wavs.to(device=self.device)
+        lengths = lengths.to(device=self.device)
+        feats_for_upstream, feats_for_downstream, linear_inp, phase_inp, linear_tar, phase_tar = self.preprocessor(wavs)
+
+        pseudo_clean = self._pseudo_clean(wavs, phase_inp, lengths).detach().cpu()
+        self.logging(step=1, tag='record/pseudo_clean', data=pseudo_clean, mode='audio')
+        self.pseudo_clean = [clean[:length] for clean, length in zip(pseudo_clean, lengths)]
+
+        pseudo_noise = self._pseudo_noise(wavs, phase_inp, lengths).detach().cpu()
+        self.logging(step=1, tag='record/pseudo_noise', data=pseudo_noise, mode='audio')
+        self.pseudo_noise = [noise[:length] for noise, length in zip(pseudo_noise, lengths)]
+
 
     def train(self, trainloader, subtrainloader=None, devloader=None, testloader=None):
         total_steps = self.rconfig['total_step']
@@ -251,23 +273,7 @@ class Runner():
             eval_and_log()
 
         if self.args.active_sampling:
-            recordset = eval(self.args.recordset)(**self.config[f'{self.args.recordset}_record'])
-            lengths, wavs = next(iter(DataLoader(recordset, batch_size=recordset.__len__(), shuffle=False, num_workers=0, collate_fn=recordset.collate_fn)))
-            self.logging(step=1, tag='record/noisy', data=wavs[:, 0, :], mode='audio')
-            self.logging(step=1, tag='record/clean', data=wavs[:, 1, :], mode='audio')
-            self.logging(step=1, tag='record/noise', data=wavs[:, 2, :], mode='audio')
-
-            wavs = wavs.to(device=self.device)
-            lengths = lengths.to(device=self.device)
-            feats_for_upstream, feats_for_downstream, linear_inp, phase_inp, linear_tar, phase_tar = self.preprocessor(wavs)
-
-            pseudo_clean = self._pseudo_clean(wavs, phase_inp, lengths).detach().cpu()
-            self.logging(step=1, tag='record/pseudo_clean', data=pseudo_clean, mode='audio')
-            self.pseudo_clean = [clean[:length].tolist() for clean, length in zip(pseudo_clean, lengths)]
-
-            pseudo_noise = self._pseudo_noise(wavs, phase_inp, lengths).detach().cpu()
-            self.logging(step=1, tag='record/pseudo_noise', data=pseudo_noise, mode='audio')
-            self.pseudo_noise = [noise[:length].tolist() for noise, length in zip(pseudo_noise, lengths)]
+            self._build_pseudo_wavs()
 
         # start training
         loss_sum = 0
@@ -478,6 +484,7 @@ class Runner():
         self.downstream_model.train()
         torch.cuda.empty_cache()
 
+        print(f'[Runner evaluate]: loss {loss_avg}, scores {scores_avg}')
         return loss_avg, scores_avg, noisy_wavs, clean_wavs, enhanced_wavs
 
     

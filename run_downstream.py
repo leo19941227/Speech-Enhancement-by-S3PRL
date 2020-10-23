@@ -71,6 +71,7 @@ def get_downstream_args():
     parser.add_argument('--sampler_device', type=int)
 
     parser.add_argument('--test', action='store_true')
+    parser.add_argument('--test_gradient', action='store_true')
 
     # parse
     args = parser.parse_args()
@@ -263,7 +264,9 @@ def main():
     runner.set_model()
 
     if args.test:
-        runner.test()
+        runner.evaluate(eval_loaders[-1])
+    elif args.test_gradient:
+        runner.test_gradient()
     else:
         runner.train(train_loader, *eval_loaders)
 
