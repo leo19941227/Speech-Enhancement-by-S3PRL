@@ -25,7 +25,7 @@ from dataset import *
 from evaluation import *
 from objective import *
 from utils import *
-from active import *
+from sampler import *
 
 OOM_RETRY_LIMIT = 10
 MAX_POSITIONS_LEN = 16000 * 50
@@ -88,7 +88,7 @@ class Runner():
         self.manager = self.ctx.Manager()
         self.parent_msg = self.ctx.Queue()
         self.child_msg = self.ctx.Queue()
-        self.active_buffers = self.manager.dict()
+        self.sampler_buffers = self.manager.dict()
 
 
     def set_model(self):
@@ -152,14 +152,14 @@ class Runner():
         return length_masks
 
 
-    def _start_active_sampler(self):
+    def _start_sampler(self):
         # create new active sampler based on current model
         self.child = self.ctx.Process(
-            target=find_active_samples,
+            target=sampler_driver,
             args=(
                 self.parent_msg,
                 self.child_msg,
-                self.active_buffers,
+                self.sampler_buffers,
                 self.args, self.config,
                 copy.deepcopy(self.preprocessor).cpu(),
                 copy.deepcopy(self.downstream_model).cpu(),
@@ -173,26 +173,26 @@ class Runner():
         print(f'[Runner] - get message {message}')
 
 
-    def _kill_active_sampler(self):
+    def _kill_sampler(self):
         if hasattr(self, 'child'):
             self.child.terminate()
             self.child.join()
             delattr(self, 'child')
 
 
-    def _collect_active_samples(self):
-        print('[Runner] - Notify children to prepare active samples.')
+    def _collect_samples(self):
+        print('[Runner] - Notify children to prepare samples.')
         self.child_msg.put('collect')
         message = self.parent_msg.get()
         print(f'[Runner] - get message {message}')
 
-        print('[Runner] - Start collecting active samples...')
-        active_samples = {}
-        for key in list(self.active_buffers.keys()):
-            active_samples[key] = copy.deepcopy(self.active_buffers[key])
-            print(f'[Runner] - key {key} gets {len(active_samples[key])} samples.')
-            self.active_buffers.pop(key)
-        return active_samples
+        print('[Runner] - Start collecting samples...')
+        samples = {}
+        for key in list(self.sampler_buffers.keys()):
+            samples[key] = copy.deepcopy(self.sampler_buffers[key])
+            print(f'[Runner] - key {key} gets {len(samples[key])} samples.')
+            self.sampler_buffers.pop(key)
+        return samples
 
 
     def _decode_wav(self, linear_tar, phase_inp, lengths, target_level=-25):
@@ -280,15 +280,16 @@ class Runner():
                     if self.global_step > total_steps:
                         break
 
-                    if self.args.active_sampling:
+                    if self.args.sampler_device is not None:
                         if not hasattr(self, 'child') or not self.child.is_alive():
-                            self._start_active_sampler()
+                            self._start_sampler()
 
-                        if self.global_step % int(self.rconfig['active_collect_step']) == 0:
-                            samples = self._collect_active_samples()
+                        if self.global_step % int(self.rconfig['sampler_collect_step']) == 0:
+                            samples = self._collect_samples()
                             for key in samples.keys():
                                 active_samples[key] += samples[key]
-
+                    
+                    if self.args.active_sampling:
                         pairs = torch.LongTensor([[i, w] for i, w in enumerate(self.rconfig['active_src_weights']) if len(active_samples[i]) > 0])
                         if len(pairs.view(-1)) > 0:
                             keys = pairs[:, 0].tolist()
@@ -356,8 +357,10 @@ class Runner():
                         for logger in train_loggers:
                             logger(step=self.global_step)
 
-                    if self.args.active_sampling and self.global_step % int(self.rconfig['active_refresh_step']) == 0:
-                        self._kill_active_sampler()
+                    if self.args.active_sampling and self.global_step % int(self.rconfig['sampler_refresh_step']) == 0:
+                        self._kill_sampler()
+
+                    if self.global_step % int(self.rconfig['active_refresh_step']) == 0:
                         active_samples = defaultdict(list)
 
                     # evaluate and save the best
@@ -377,9 +380,6 @@ class Runner():
 
                 pbar.update(1)
                 self.global_step += 1
-            
-            if self.args.active_sampling:
-                self.child.terminate()
 
         if hasattr(self, 'child') and self.child.is_alive():
             self.child.terminate()

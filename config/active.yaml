@@ -19,11 +19,12 @@ runner:
   gradient_clipping: 1.0                                # Maximum gradient norm
   total_step: 20000                                            # total steps for training, a step is a batch of update
   log_step: 500                                          # log training status every this amount of training steps
-  eval_step: 2000                                         # evaluate every this amount of training steps
+  eval_step: 100                                         # evaluate every this amount of training steps
   media_step: 4000
-  active_refresh_step: 1000
-  active_collect_step: 100
-  active_sample_num: 10000
+  sampler_refresh_step: 50
+  sampler_collect_step: 25
+  sampler_sample_num: 10
+  active_refresh_step: 50
   active_query_num: 32
   active_src_weights: [1, 1, 1, 1]
   max_keep: 1                                           # maximum number of model ckpt to keep during training

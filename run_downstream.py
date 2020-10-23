@@ -68,7 +68,7 @@ def get_downstream_args():
     parser.add_argument('--no_metric', action='store_true')
 
     parser.add_argument('--active_sampling', action='store_true')
-    parser.add_argument('--active_device', type=int)
+    parser.add_argument('--sampler_device', type=int)
 
     # parse
     args = parser.parse_args()

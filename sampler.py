@@ -98,17 +98,18 @@ def thresholding(match_scores):
     return match_scores > 0
 
 
-def find_active_samples(parent_msg,
-                        child_msg,
-                        buffers,
-                        args, config,
-                        preprocessor, model, criterion,
-                        pseudo_clean, pseudo_noise):
+def sampler_driver(
+    parent_msg,
+    child_msg,
+    buffers,
+    args, config,
+    preprocessor, model, criterion,
+    pseudo_clean, pseudo_noise):
 
     torch.multiprocessing.set_sharing_strategy('file_system')
     def handler(buffers, current_buffers, n_sample, signum, frame):
-        print('[Active] - Signal handler called with signal', signum)
-        print('[Active] - Writing data to buffers in manager... ', end='')
+        print('[Sampler] - Signal handler called with signal', signum)
+        print('[Sampler] - Writing data to buffers in manager... ', end='')
         for key in current_buffers.keys():
             buffers[key] = current_buffers[key][:n_sample]
             current_buffers[key] = []
@@ -116,11 +117,11 @@ def find_active_samples(parent_msg,
         exit(0)
 
     current_buffers = {0: [], 1: [], 2: [], 3: []}
-    print('[Active] - Register SIGTERM handler.')
-    signal.signal(signal.SIGTERM, partial(handler, buffers, current_buffers, config['runner']['active_sample_num']))
+    print('[Sampler] - Register SIGTERM handler.')
+    signal.signal(signal.SIGTERM, partial(handler, buffers, current_buffers, config['runner']['sampler_sample_num']))
 
-    if args.active_device is not None:
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(args.active_device)
+    if args.sampler_device is not None:
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(args.sampler_device)
         device = 'cuda'
     else:
         device = 'cpu'
@@ -153,13 +154,13 @@ def find_active_samples(parent_msg,
                                     pseudo_clean=pseudo_clean,
                                     pseudo_noise=pseudo_noise)
     
-    parent_msg.put('start active sampling')
+    parent_msg.put('start sampler sampling')
     while True:
-        print('[Active] - Set up new dataloader.')
+        print('[Sampler] - Set up new dataloader.')
         train_loader = DataLoader(train_set, batch_size=config['dataloader']['batch_size'], shuffle=True,
                                   num_workers=args.n_jobs, collate_fn=train_set.collate_fn)
 
-        print(f'[Active] - Dataloader batch num: {len(train_loader)}')
+        print(f'[Sampler] - Dataloader batch num: {len(train_loader)}')
         for bszid, (lengths, wavs, cases) in enumerate(train_loader):
             lengths = lengths.to(device)
             wavs = wavs.to(device)
@@ -183,12 +184,12 @@ def find_active_samples(parent_msg,
                 message = None
 
             if message is not None:
-                print(f'[Active] - get message {message}')
+                print(f'[Sampler] - get message {message}')
                 for key in list(current_buffers.keys()):
-                    buffers[key] = current_buffers[key][:config['runner']['active_sample_num']]
+                    buffers[key] = current_buffers[key][:config['runner']['sampler_sample_num']]
                     current_buffers[key] = []
-                print('[Active] - Finish preparing active samples.')
+                print('[Sampler] - Finish preparing sampler samples.')
                 parent_msg.put('finish')
-                print('[Active] - Go on for finding new active samples.')
+                print('[Sampler] - Go on for finding new sampler samples.')
 
-        print(f'[Active] - Dataloader exhuasted.')
+        print(f'[Sampler] - Dataloader exhuasted.')
