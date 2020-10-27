@@ -182,18 +182,6 @@ def get_upstream_model(input_dim, upstream, ckpt, dropout):
     return upstream_model
 
 
-def get_dataloader(args, config):
-    train_set = eval(args.trainset)(**config[f'{args.trainset}_train'])
-    subtrain_set = train_set.get_subset(n_file=100)
-    test_set = eval(args.testset)(**config[f'{args.testset}_test'])
-
-    train_bsz, eval_bsz = config['dataloader']['batch_size'], config['dataloader']['eval_batch_size']
-    train_loader = DataLoader(train_set, batch_size=train_bsz, shuffle=True, num_workers=args.n_jobs, collate_fn=train_set.collate_fn)
-    subtrain_loader = DataLoader(subtrain_set, batch_size=eval_bsz, num_workers=args.n_jobs, collate_fn=subtrain_set.collate_fn)
-    test_loader = DataLoader(test_set, batch_size=eval_bsz, num_workers=args.n_jobs, collate_fn=test_set.collate_fn)
-    return train_loader, subtrain_loader, None, test_loader
-
-
 def get_downstream_model(args, input_dim, output_dim, config):
     if args.dckpt == '':
         model_config = config['model'][args.downstream] if args.downstream in config['model'] else {}
@@ -250,9 +238,6 @@ def main():
     upstream_model = get_upstream_model(upstream_feat_dim, args.upstream, args.ckpt, args.dropout)
     upstream_model2 = get_upstream_model(upstream_feat_dim, args.upstream2, args.ckpt2, args.dropout2)
 
-    # get dataloaders
-    train_loader, *eval_loaders = get_dataloader(args, config)
-
     # get downstream model
     downstream_inpdim = downstream_feat_dim if (args.from_rawfeature or args.from_waveform) else upstream_model.out_dim
     downstream_model = get_downstream_model(args, downstream_inpdim, tar_linear_dim, config)
@@ -267,11 +252,11 @@ def main():
     runner.set_model()
 
     if args.test:
-        runner.evaluate(eval_loaders[-1])
+        runner.evaluate()
     elif args.test_gradient:
         runner.test_gradient()
     else:
-        runner.train(train_loader, *eval_loaders)
+        runner.train()
 
 
 if __name__ == '__main__':

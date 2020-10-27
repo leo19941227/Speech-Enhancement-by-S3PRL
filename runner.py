@@ -93,6 +93,9 @@ class Runner():
         self.scoring_tmp = partial(scoring, self.args, self.config, self.preprocessor,
                                    self.downstream_model, self.criterion, self.ascending)
 
+        self.pseudo_clean = None
+        self.pseudo_noise = None
+
 
     def set_model(self):
         self.upstream_model.eval()
@@ -239,17 +242,57 @@ class Runner():
         self.pseudo_noise = [noise[:length] for noise, length in zip(pseudo_noise, lengths)]
 
 
-    def train(self, trainloader, subtrainloader=None, devloader=None, testloader=None):
+    def get_dataset(self, mode='train'):
+        split = 'train' if mode == 'subtrain' else mode
+
+        ds_type = eval(f'self.args.{split}set')
+        ds_conf = self.config[f'{ds_type}_{split}']
+        
+        if type(ds_conf.get('pseudo_modes')) is list:
+            if self.pseudo_clean is None or slef.pseudo_noise is None:
+                self._build_pseudo_wavs()
+        
+        dataset = eval(ds_type)(
+            **ds_confg,
+            pseudo_clean=self.pseudo_clean,
+            pseudo_noise=self.pseudo_noise,
+        )
+
+        if mode == 'subtrain':
+            dataset = dataset.get_subset(n_file=100)
+
+        return dataset
+
+    
+    def get_dataloader(self, dataset, train=True):
+        bsz = self.config['dataloader']['batch_size'] if train else self.config['dataloader']['eval_batch_size']
+        return DataLoader(
+            batch_size=bsz,
+            shuffle=train,
+            num_workers=self.args.n_jobs,
+            collate_fn=dataset.collate_fn
+        )
+
+
+    def train(self):
         total_steps = self.rconfig['total_step']
         pbar = tqdm(total=total_steps, dynamic_ncols=True)
         pbar.n = self.global_step - 1
 
-        variables = locals()
+        trainset = self.get_dataset('train')
+        trainloader = self.get_dataloader(trainset, train=True)
+
+        eval_settings = []
         eval_splits = self.rconfig['eval_splits']
         eval_metrics = self.rconfig['eval_metrics']
-        eval_settings = [(split_name, eval(f'{split_name}loader', None, variables), torch.zeros(len(self.metrics)))
-                          for split_name in eval_splits]
-        # eval_settings: [(split_name, split_loader, split_current_best_metrics), ...]
+        for split_name in eval_splits:
+            split_dataset = self.get_dataset(split_name)
+            split_dataloader = self.get_dataloader(split_dataset)
+            eval_settings.append((
+                split_name,
+                split_dataloader,
+                torch.zeros(len(self.metrics)),
+            ))
         
         def eval_and_log(log_media=False):
             for split_name, split_loader, metrics_best in eval_settings:
@@ -272,9 +315,6 @@ class Runner():
 
         if self.args.eval_init:
             eval_and_log()
-
-        if self.args.active_sampling:
-            self._build_pseudo_wavs()
 
         if self.args.sync_sampler:
             query_set = copy.deepcopy(trainloader.dataset)
@@ -437,7 +477,7 @@ class Runner():
         self.log.close()
 
 
-    def evaluate(self, dataloader):
+    def evaluate(self, dataloader=None):
         random.seed(self.args.seed)
         np.random.seed(self.args.seed)
         torch.manual_seed(self.args.seed)
@@ -449,7 +489,11 @@ class Runner():
         self.upstream_model.eval()
         self.upstream_model2.eval()
         self.downstream_model.eval()
-        
+
+        if dataloader is None:
+            testset = self.get_dataset('test')
+            dataloader = self.get_dataloader(testset, train=False)
+
         data_num = len(dataloader)
         sample_interval = int(data_num / LOG_WAV_NUM)
         sample_indices = list(range(0, data_num, sample_interval))[:LOG_WAV_NUM]
