@@ -5,6 +5,8 @@
 **/config/**
 **/DNS-Challenge/**
 **/wandb/**
+log
+visual
 
 *.ipynb
 *.yaml

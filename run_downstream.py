@@ -69,6 +69,8 @@ def get_downstream_args():
 
     parser.add_argument('--active_sampling', action='store_true')
     parser.add_argument('--sampler_device', type=int)
+    parser.add_argument('--active_layerid', type=int)
+    parser.add_argument('--n_iterate', type=int)
 
     parser.add_argument('--test', action='store_true')
     parser.add_argument('--test_gradient', action='store_true')

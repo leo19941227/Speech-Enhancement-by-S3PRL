@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import glob
 import math
@@ -80,8 +81,15 @@ def scoring(args, config, preprocessor, model, criterion, ascending, lengths, wa
         loss.backward(retain_graph=True)
 
         grad = []
-        for para in model.parameters():
-            grad.append(para.grad.view(-1))
+        for key, para in model.named_parameters():
+            if args.active_layerid is None:
+                grad.append(para.grad.view(-1))
+            else:
+                pattern = re.search('lstm.*l(\d+)', key)
+                if pattern is not None:
+                    layerid = int(pattern.group().split('_')[-1][1:])
+                    if layerid == args.active_layerid:
+                        grad.append(para.grad.view(-1))
         grad = torch.cat(grad, dim=0)
         grads.append(grad.detach())
 

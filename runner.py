@@ -501,7 +501,7 @@ class Runner():
             pseudo_noise=self.pseudo_noise,
         )
         query_loader = iter(DataLoader(
-            query_set, batch_size=1, shuffle=True,
+            query_set, batch_size=self.config['dataloader']['batch_size'], shuffle=True,
             num_workers=self.args.n_jobs, collate_fn=query_set.collate_fn
         ))
 
@@ -512,12 +512,12 @@ class Runner():
             pseudo_noise=self.pseudo_noise,
         )
         train_loader = iter(DataLoader(
-            train_set, batch_size=1, shuffle=True,
+            train_set, batch_size=self.config['dataloader']['batch_size'], shuffle=True,
             num_workers=self.args.n_jobs, collate_fn=train_set.collate_fn
         ))
 
         similarities = defaultdict(list)
-        for i in tqdm(range(10000), dynamic_ncols=True):
+        for i in tqdm(range(self.args.n_iterate), dynamic_ncols=True):
             query_lengths, query_wavs, _ = next(query_loader)
             train_lengths, train_wavs, cases = next(train_loader)
 
@@ -525,11 +525,11 @@ class Runner():
                 print('Skip when qeury_wavs == train_wavs')
                 continue
 
-            query_score = self.scoring_tmp(query_lengths.to(self.device), query_wavs.to(self.device))
+            query_score = self.scoring_tmp(query_lengths.to(self.device), query_wavs.to(self.device)).mean(dim=0, keepdim=True)
             train_score = self.scoring_tmp(train_lengths.to(self.device), train_wavs.to(self.device))
 
-            query_score_norm = query_score / (query_score.pow(2).sum(dim=-1).pow(0.5) + self.eps)
-            train_score_norm = train_score / (train_score.pow(2).sum(dim=-1).pow(0.5) + self.eps)
+            query_score_norm = query_score / (query_score.pow(2).sum(dim=-1, keepdim=True).pow(0.5) + self.eps)
+            train_score_norm = train_score / (train_score.pow(2).sum(dim=-1, keepdim=True).pow(0.5) + self.eps)
 
             similarity = (query_score_norm * train_score_norm).sum(dim=-1).view(-1)
             for sim, case in zip(similarity, cases):
