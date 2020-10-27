@@ -130,16 +130,18 @@ class OnlineDataset(Dataset):
 
         # speech
         speech_pth = self.filepths[idx]
-        speech = self.load_data(speech_pth)
         if 'case' in locals() and (case == 2 or case == 3) and self.pseudo_clean is not None:
             speech = random.choice(self.pseudo_clean)
+        else:
+            speech = self.load_data(speech_pth)
         speech = self.normalize_wav_decibel(speech)
 
         # noise
         noise_pth = random.choice(self.all_noises) if self.infinite else self.fixed_noises[idx]
-        noise = self.load_data(noise_pth)
         if 'case' in locals() and (case == 0 or case == 3) and self.pseudo_noise is not None:
             noise = random.choice(self.pseudo_noise)
+        else:
+            noise = self.load_data(noise_pth)
         noise = self.normalize_wav_decibel(noise)
 
         # noisy

@@ -277,19 +277,19 @@ class Runner():
             self._build_pseudo_wavs()
 
         if self.args.sync_sampler:
-            train_bsz = self.config['dataloader']['batch_size']
-
             query_set = copy.deepcopy(trainloader.dataset)
             query_set.pseudo_modes = [3]
             query_set.pseudo_clean = copy.deepcopy(self.pseudo_clean)
             query_set.pseudo_noise = copy.deepcopy(self.pseudo_noise)
-            queryloader = DataLoader(query_set, batch_size=train_bsz, shuffle=True, num_workers=self.args.n_jobs, collate_fn=query_set.collate_fn)
+            query_bsz = self.config['runner']['active_query_num']
+            queryloader = DataLoader(query_set, batch_size=query_bsz, shuffle=True, num_workers=self.args.n_jobs, collate_fn=query_set.collate_fn)
             queryloader_iter = iter(queryloader)
 
             train_set = copy.deepcopy(trainloader.dataset)
             train_set.pseudo_modes = [0, 1, 2, 3]
             train_set.pseudo_clean = copy.deepcopy(self.pseudo_clean)
             train_set.pseudo_noise = copy.deepcopy(self.pseudo_noise)
+            train_bsz = self.config['dataloader']['batch_size']
             trainloader = DataLoader(train_set, batch_size=train_bsz, shuffle=True, num_workers=self.args.n_jobs, collate_fn=train_set.collate_fn)
 
         # start training
@@ -319,7 +319,7 @@ class Runner():
                             queryloader_iter = iter(queryloader)
                             query_lengths, query_wavs, _  = next(queryloader_iter)
 
-                        query_scores = self.scoring_tmp(query_lengths.to(self.device), query_wavs.to(self.device)).mean(dim=0, keepdim=True)
+                        query_scores = self.scoring_tmp(query_lengths.to(self.device), query_wavs.to(self.device), mean=True)
                         train_scores = self.scoring_tmp(lengths.to(self.device), wavs.to(self.device))
 
                         # matching

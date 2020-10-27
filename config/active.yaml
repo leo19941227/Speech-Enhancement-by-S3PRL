@@ -19,7 +19,7 @@ runner:
   gradient_clipping: 1.0                                # Maximum gradient norm
   total_step: 20000                                            # total steps for training, a step is a batch of update
   log_step: 500                                          # log training status every this amount of training steps
-  eval_step: 100                                         # evaluate every this amount of training steps
+  eval_step: 1000                                         # evaluate every this amount of training steps
   media_step: 4000
   sampler_refresh_step: 50
   sampler_collect_step: 25
@@ -59,9 +59,9 @@ model:
 
 OnlineDataset_train:
   speech:
-    filestrs: '/home/leo/d/datasets/speech_data/clean_trainset_wav_16k'
+    filestrs: '../speech_data/clean_trainset_wav_16k'
   noise:
-    filestrs: '/home/leo/d/datasets/DNS-Challenge/datasets/noise'
+    filestrs: '../DNS-Challenge/datasets/noise'
 
   sample_rate: 16000
   max_time: 10000
@@ -72,11 +72,11 @@ OnlineDataset_train:
 
 OnlineDataset_record:
   speech:
-    filestrs: '/home/leo/d/datasets/speech_data/clean_testset_wav_16k/p232*'
+    filestrs: '../speech_data/clean_testset_wav_16k/p232*'
     sample_num_per_str: 5
     select_sampled: True
   noise:
-    filestrs: '/home/leo/d/datasets/noise_data/Nonspeech/bell'
+    filestrs: '../noise_data/Nonspeech/Bell'
 
   sample_rate: 16000
   max_time: 10000
@@ -86,11 +86,11 @@ OnlineDataset_record:
 
 OnlineDataset_test:
   speech:
-    filestrs: '/home/leo/d/datasets/speech_data/clean_testset_wav_16k/p232*'
+    filestrs: '../speech_data/clean_testset_wav_16k/p232*'
     sample_num_per_str: 10
     select_sampled: False
   noise:
-    filestrs: '/home/leo/d/datasets/noise_data/Nonspeech/bell'
+    filestrs: '../noise_data/Nonspeech/Bell'
 
   sample_rate: 16000
   max_time: 10000

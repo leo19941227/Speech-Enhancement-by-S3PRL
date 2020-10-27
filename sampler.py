@@ -56,7 +56,7 @@ def mixing(cleans, noises, norm_fn, collate_fn, snrs, query_num=32):
     return collate_fn(wavs)
 
 
-def scoring(args, config, preprocessor, model, criterion, ascending, lengths, wavs):
+def scoring(args, config, preprocessor, model, criterion, ascending, lengths, wavs, mean=False):
     feats_for_upstream, feats_for_downstream, linear_inp, phase_inp, linear_tar, phase_tar = preprocessor(wavs)
 
     if args.from_waveform:
@@ -75,7 +75,18 @@ def scoring(args, config, preprocessor, model, criterion, ascending, lengths, wa
         return tensor.chunk(tensor.size(0), dim=0)
 
     grads = []
-    for pre, log_pre, tar, stft in zip(chunk(predicted), chunk(log_predicted), chunk(linear_tar), chunk(stft_length_masks)):
+    if not mean:
+        predicted = chunk(predicted)
+        log_predicted = chunk(log_predicted)
+        linear_tar = chunk(linear_tar)
+        stft_length_masks = chunk(stft_length_masks)
+    else:
+        predicted = [predicted]
+        log_predicted = [log_predicted]
+        linear_tar = [linear_tar]
+        stft_length_masks = [stft_length_masks]
+
+    for pre, log_pre, tar, stft in zip(predicted, log_predicted, linear_tar, stft_length_masks):
         loss, objective_results = criterion(predicted=pre, log_predicted=log_pre, linear_tar=tar, stft_length_masks=stft)
         model.zero_grad()
         loss.backward(retain_graph=True)
