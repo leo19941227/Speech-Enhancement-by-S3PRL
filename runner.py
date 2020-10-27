@@ -151,6 +151,45 @@ class Runner():
         torch.save(all_states, model_path)
 
 
+    def get_dataset(self, mode='train'):
+        split = 'train' if mode in ['subtrain', 'query'] else mode
+
+        ds_type = eval(f'self.args.{split}set')
+        ds_conf = self.config[f'{ds_type}_{split}']
+        
+        if type(ds_conf.get('pseudo_modes')) is list:
+            if self.pseudo_clean is None or self.pseudo_noise is None:
+                self._build_pseudo_wavs()
+        
+        dataset = eval(ds_type)(
+            **ds_conf,
+            pseudo_clean=self.pseudo_clean,
+            pseudo_noise=self.pseudo_noise,
+        )
+
+        if mode == 'subtrain':
+            dataset = dataset.get_subset(n_file=100)
+        
+        if mode == 'query':
+            dataset.pseudo_modes = [3]
+
+        print(f'[Dataset] - {mode} dataset is created.')
+        return dataset
+
+    
+    def get_dataloader(self, dataset, train=True, bsz=None):
+        if bsz is None:
+            bsz = self.config['dataloader']['batch_size'] if train else self.config['dataloader']['eval_batch_size']
+
+        return DataLoader(
+            dataset,
+            batch_size=bsz,
+            shuffle=train,
+            num_workers=self.args.n_jobs,
+            collate_fn=dataset.collate_fn
+        )
+
+
     def _get_length_masks(self, lengths):
         # lengths: (batch_size, ) in cuda
         ascending = self.ascending[:lengths.max().item()].unsqueeze(0).expand(len(lengths), -1)
@@ -221,10 +260,11 @@ class Runner():
             linear_predicted, _ = self.upstream_model2.SpecHead(features)
         return self._decode_wav(linear_predicted, *args)
 
-    
+
     def _build_pseudo_wavs(self):
-        recordset = eval(self.args.recordset)(**self.config[f'{self.args.recordset}_record'])
-        lengths, wavs = next(iter(DataLoader(recordset, batch_size=recordset.__len__(), shuffle=False, num_workers=0, collate_fn=recordset.collate_fn)))
+        recordset = self.get_dataset('record')
+        recordloader = self.get_dataloader(recordset, train=False, bsz=recordset.__len__())
+        lengths, wavs = next(iter(recordloader))
         self.logging(step=1, tag='record/noisy', data=wavs[:, 0, :], mode='audio')
         self.logging(step=1, tag='record/clean', data=wavs[:, 1, :], mode='audio')
         self.logging(step=1, tag='record/noise', data=wavs[:, 2, :], mode='audio')
@@ -242,45 +282,10 @@ class Runner():
         self.pseudo_noise = [noise[:length] for noise, length in zip(pseudo_noise, lengths)]
 
 
-    def get_dataset(self, mode='train'):
-        split = 'train' if mode == 'subtrain' else mode
-
-        ds_type = eval(f'self.args.{split}set')
-        ds_conf = self.config[f'{ds_type}_{split}']
-        
-        if type(ds_conf.get('pseudo_modes')) is list:
-            if self.pseudo_clean is None or slef.pseudo_noise is None:
-                self._build_pseudo_wavs()
-        
-        dataset = eval(ds_type)(
-            **ds_confg,
-            pseudo_clean=self.pseudo_clean,
-            pseudo_noise=self.pseudo_noise,
-        )
-
-        if mode == 'subtrain':
-            dataset = dataset.get_subset(n_file=100)
-
-        return dataset
-
-    
-    def get_dataloader(self, dataset, train=True):
-        bsz = self.config['dataloader']['batch_size'] if train else self.config['dataloader']['eval_batch_size']
-        return DataLoader(
-            batch_size=bsz,
-            shuffle=train,
-            num_workers=self.args.n_jobs,
-            collate_fn=dataset.collate_fn
-        )
-
-
     def train(self):
         total_steps = self.rconfig['total_step']
         pbar = tqdm(total=total_steps, dynamic_ncols=True)
         pbar.n = self.global_step - 1
-
-        trainset = self.get_dataset('train')
-        trainloader = self.get_dataloader(trainset, train=True)
 
         eval_settings = []
         eval_splits = self.rconfig['eval_splits']
@@ -317,26 +322,25 @@ class Runner():
             eval_and_log()
 
         if self.args.sync_sampler:
-            query_set = copy.deepcopy(trainloader.dataset)
-            query_set.pseudo_modes = [3]
-            query_set.pseudo_clean = copy.deepcopy(self.pseudo_clean)
-            query_set.pseudo_noise = copy.deepcopy(self.pseudo_noise)
-            query_bsz = self.config['runner']['active_query_num']
-            queryloader = DataLoader(query_set, batch_size=query_bsz, shuffle=True, num_workers=self.args.n_jobs, collate_fn=query_set.collate_fn)
+            queryset = self.get_dataset('query')
+            queryloader = self.get_dataloader(queryset, bsz=self.config['runner']['active_query_num'])
             queryloader_iter = iter(queryloader)
 
-            train_set = copy.deepcopy(trainloader.dataset)
-            train_set.pseudo_modes = [0, 1, 2, 3]
-            train_set.pseudo_clean = copy.deepcopy(self.pseudo_clean)
-            train_set.pseudo_noise = copy.deepcopy(self.pseudo_noise)
-            train_bsz = self.config['dataloader']['batch_size']
-            trainloader = DataLoader(train_set, batch_size=train_bsz, shuffle=True, num_workers=self.args.n_jobs, collate_fn=train_set.collate_fn)
+        trainset = self.get_dataset('train')
+        trainloader = self.get_dataloader(trainset)
 
         # start training
         loss_sum = 0
         active_samples = defaultdict(list)
         while self.global_step <= total_steps:
             for batch in trainloader:
+                if len(batch) == 2:
+                    lengths, wavs = batch
+                elif len(batch) == 3:
+                    lengths, wavs, cases = batch
+                else:
+                    raise NotImplementedError
+
                 train_loggers = []
                 try:
                     if self.global_step > total_steps:
@@ -352,8 +356,6 @@ class Runner():
                                 active_samples[key] += samples[key]
 
                     if self.args.sync_sampler:
-                        lengths, wavs, cases = batch
-
                         try:
                             query_lengths, query_wavs, _  = next(queryloader_iter)
                         except:
@@ -374,11 +376,9 @@ class Runner():
                                 'wavs': wavs[idx, :, :lengths[idx].cpu()].transpose(-1, -2).contiguous(),
                                 'match_score': match_scores[idx],
                             })
-                    else:
-                        lengths, wavs = batch
 
                     if self.args.active_sampling:
-                        pairs = torch.LongTensor([[i, w] for i, w in enumerate(self.rconfig['active_src_weights']) if len(active_samples[i]) > 0])
+                        pairs = torch.LongTensor([[i, w] for i, w in enumerate(self.rconfig['active_buffer_weights']) if len(active_samples[i]) > 0])
                         if len(pairs.view(-1)) > 0:
                             keys = pairs[:, 0].tolist()
                             weights = pairs[:, 1].tolist()
@@ -502,8 +502,15 @@ class Runner():
         loss_sum = 0
         oom_counter = 0
         scores_sum = torch.zeros(len(self.metrics))
-        for indice, (lengths, wavs) in enumerate(tqdm(dataloader, desc="Iteration", dynamic_ncols=True)):
+        for indice, batch in enumerate(tqdm(dataloader, desc="Iteration", dynamic_ncols=True)):
             with torch.no_grad():
+                if len(batch) == 2:
+                    lengths, wavs = batch
+                elif len(batch) == 3:
+                    lengths, wavs, cases = batch
+                else:
+                    raise NotImplementedError
+
                 try:
                     wavs = wavs.to(device=self.device)
                     lengths = lengths.to(device=self.device)

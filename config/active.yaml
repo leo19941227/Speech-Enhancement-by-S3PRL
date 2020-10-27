@@ -26,7 +26,7 @@ runner:
   sampler_sample_num: 10
   active_refresh_step: 50
   active_query_num: 32
-  active_src_weights: [1, 1, 1, 1]
+  active_buffer_weights: [1, 1, 1, 1]
   max_keep: 1                                           # maximum number of model ckpt to keep during training
   eval_splits: ['subtrain', 'test']
   eval_metrics: ['stoi', 'pesq_nb', 'sisdr']
@@ -59,24 +59,25 @@ model:
 
 OnlineDataset_train:
   speech:
-    filestrs: '../speech_data/clean_trainset_wav_16k'
+    filestrs: '../datasets/speech_data/clean_trainset_wav_16k'
   noise:
-    filestrs: '../DNS-Challenge/datasets/noise'
+    filestrs: '../datasets/DNS-Challenge/datasets/noise'
 
   sample_rate: 16000
   max_time: 10000
   target_level: -25
   snrs: [-8, -6, -4, -2, 0, 2, 4, 6, 8]
   infinite: True
+  pseudo_modes: [0, 1, 2, 3]
 
 
 OnlineDataset_record:
   speech:
-    filestrs: '../speech_data/clean_testset_wav_16k/p232*'
+    filestrs: '../datasets/speech_data/clean_testset_wav_16k/p232*'
     sample_num_per_str: 5
     select_sampled: True
   noise:
-    filestrs: '../noise_data/Nonspeech/Bell'
+    filestrs: '../datasets/noise_data/Nonspeech/bell'
 
   sample_rate: 16000
   max_time: 10000
@@ -86,11 +87,11 @@ OnlineDataset_record:
 
 OnlineDataset_test:
   speech:
-    filestrs: '../speech_data/clean_testset_wav_16k/p232*'
+    filestrs: '../datasets/speech_data/clean_testset_wav_16k/p232*'
     sample_num_per_str: 10
     select_sampled: False
   noise:
-    filestrs: '../noise_data/Nonspeech/Bell'
+    filestrs: '../datasets/noise_data/Nonspeech/bell'
 
   sample_rate: 16000
   max_time: 10000
