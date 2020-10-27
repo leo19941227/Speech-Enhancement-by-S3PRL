@@ -276,11 +276,27 @@ class Runner():
         if self.args.active_sampling:
             self._build_pseudo_wavs()
 
+        if self.args.sync_sampler:
+            train_bsz = self.config['dataloader']['batch_size']
+
+            query_set = copy.deepcopy(trainloader.dataset)
+            query_set.pseudo_modes = [3]
+            query_set.pseudo_clean = copy.deepcopy(self.pseudo_clean)
+            query_set.pseudo_noise = copy.deepcopy(self.pseudo_noise)
+            queryloader = DataLoader(query_set, batch_size=train_bsz, shuffle=True, num_workers=self.args.n_jobs, collate_fn=query_set.collate_fn)
+            queryloader_iter = iter(queryloader)
+
+            train_set = copy.deepcopy(trainloader.dataset)
+            train_set.pseudo_modes = [0, 1, 2, 3]
+            train_set.pseudo_clean = copy.deepcopy(self.pseudo_clean)
+            train_set.pseudo_noise = copy.deepcopy(self.pseudo_noise)
+            trainloader = DataLoader(train_set, batch_size=train_bsz, shuffle=True, num_workers=self.args.n_jobs, collate_fn=train_set.collate_fn)
+
         # start training
         loss_sum = 0
         active_samples = defaultdict(list)
         while self.global_step <= total_steps:
-            for lengths, wavs in trainloader:
+            for lengths, wavs, cases in trainloader:
                 # wavs: (batch_size, channel, max_len)
                 train_loggers = []
                 try:
@@ -295,6 +311,28 @@ class Runner():
                             samples = self._collect_samples()
                             for key in samples.keys():
                                 active_samples[key] += samples[key]
+
+                    if self.args.sync_sampler:
+                        try:
+                            query_lengths, query_wavs, _  = next(queryloader_iter)
+                        except:
+                            queryloader_iter = iter(queryloader)
+                            query_lengths, query_wavs, _  = next(queryloader_iter)
+
+                        query_scores = self.scoring_tmp(query_lengths.to(self.device), query_wavs.to(self.device)).mean(dim=0, keepdim=True)
+                        train_scores = self.scoring_tmp(lengths.to(self.device), wavs.to(self.device))
+
+                        # matching
+                        match_scores = matching(query_scores, train_scores)
+                        is_match = thresholding(match_scores).nonzero().view(-1)
+
+                        wavs = wavs.detach().cpu()
+                        match_scores = match_scores.detach().cpu()
+                        for idx in is_match:
+                            active_samples[cases[idx].item()].append({
+                                'wavs': wavs[idx, :, :lengths[idx].cpu()].transpose(-1, -2).contiguous(),
+                                'match_score': match_scores[idx],
+                            })
                     
                     if self.args.active_sampling:
                         pairs = torch.LongTensor([[i, w] for i, w in enumerate(self.rconfig['active_src_weights']) if len(active_samples[i]) > 0])

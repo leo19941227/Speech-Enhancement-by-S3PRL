@@ -91,14 +91,17 @@ def scoring(args, config, preprocessor, model, criterion, ascending, lengths, wa
                     if layerid == args.active_layerid:
                         grad.append(para.grad.view(-1))
         grad = torch.cat(grad, dim=0)
-        grads.append(grad.detach())
+        grads.append(grad.detach())    
+        model.zero_grad()
 
     grads = torch.stack(grads, dim=0)
     # grads: (batch_size, model_parameters)
     return grads
 
 
-def matching(query_scores, key_scores):
+def matching(query_scores, key_scores, eps=1e-12):
+    query_scores = query_scores / (query_scores.pow(2).sum(dim=-1, keepdim=True).pow(0.5) + eps)
+    key_scores = key_scores / (key_scores.pow(2).sum(dim=-1, keepdim=True).pow(0.5) + eps)
     return torch.mm(key_scores, query_scores.mean(dim=0).unsqueeze(1)).reshape(-1)
 
 
