@@ -296,8 +296,7 @@ class Runner():
         loss_sum = 0
         active_samples = defaultdict(list)
         while self.global_step <= total_steps:
-            for lengths, wavs, cases in trainloader:
-                # wavs: (batch_size, channel, max_len)
+            for batch in trainloader:
                 train_loggers = []
                 try:
                     if self.global_step > total_steps:
@@ -313,6 +312,8 @@ class Runner():
                                 active_samples[key] += samples[key]
 
                     if self.args.sync_sampler:
+                        lengths, wavs, cases = batch
+
                         try:
                             query_lengths, query_wavs, _  = next(queryloader_iter)
                         except:
@@ -333,7 +334,9 @@ class Runner():
                                 'wavs': wavs[idx, :, :lengths[idx].cpu()].transpose(-1, -2).contiguous(),
                                 'match_score': match_scores[idx],
                             })
-                    
+                    else:
+                        lengths, wavs = batch
+
                     if self.args.active_sampling:
                         pairs = torch.LongTensor([[i, w] for i, w in enumerate(self.rconfig['active_src_weights']) if len(active_samples[i]) > 0])
                         if len(pairs.view(-1)) > 0:
