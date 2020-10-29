@@ -321,13 +321,14 @@ class Runner():
         if self.args.eval_init:
             eval_and_log()
 
+        trainset = self.get_dataset('train')
         if self.args.sync_sampler:
             queryset = self.get_dataset('query')
             queryloader = self.get_dataloader(queryset, bsz=self.config['runner']['active_query_num'])
             queryloader_iter = iter(queryloader)
-
-        trainset = self.get_dataset('train')
-        trainloader = self.get_dataloader(trainset)
+            trainloader = self.get_dataloader(trainset, bsz=self.config['dataloader']['active_batch_size'])
+        else:
+            trainloader = self.get_dataloader(trainset)
 
         # start training
         loss_sum = 0
@@ -382,7 +383,7 @@ class Runner():
                         if len(pairs.view(-1)) > 0:
                             keys = pairs[:, 0].tolist()
                             weights = pairs[:, 1].tolist()
-                            types = random.choices(keys, weights, k=len(wavs))
+                            types = random.choices(keys, weights, k=self.config['dataloader']['batch_size'])
                             wavs = [random.choice(active_samples[t])['wavs'] for t in types]
                             lengths, wavs = trainloader.dataset.collate_fn(wavs)
 
