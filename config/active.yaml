@@ -1,7 +1,7 @@
 dataloader:
   batch_size: 6                                         # training batch size, 12 for pre-train, 6 for cpc exp
   eval_batch_size: 12
-  active_batch_size: 6
+  active_batch_size: 12
 
 preprocessor:
   input_channel: 0

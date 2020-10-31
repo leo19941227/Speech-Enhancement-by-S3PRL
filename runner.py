@@ -332,7 +332,7 @@ class Runner():
 
         # start training
         loss_sum = 0
-        active_samples = defaultdict(list)
+        active_samples = defaultdict(lambda: defaultdict(list))
         while self.global_step <= total_steps:
             for batch in trainloader:
                 if len(batch) == 2:
@@ -354,7 +354,7 @@ class Runner():
                         if self.global_step % int(self.rconfig['sampler_collect_step']) == 0:
                             samples = self._collect_samples()
                             for key in samples.keys():
-                                active_samples[key] += samples[key]
+                                active_samples[self.global_step][key] += samples[key]
 
                     if self.args.sync_sampler:
                         try:
@@ -373,18 +373,27 @@ class Runner():
                         wavs = wavs.detach().cpu()
                         match_scores = match_scores.detach().cpu()
                         for idx in is_match:
-                            active_samples[cases[idx].item()].append({
+                            active_samples[self.global_step][cases[idx].item()].append({
                                 'wavs': wavs[idx, :, :lengths[idx].cpu()].transpose(-1, -2).contiguous(),
                                 'match_score': match_scores[idx],
                             })
 
                     if self.args.active_sampling:
-                        pairs = torch.LongTensor([[i, w] for i, w in enumerate(self.rconfig['active_buffer_weights']) if len(active_samples[i]) > 0])
+                        prev_step = self.global_step - self.rconfig['active_refresh_step']
+                        if prev_step > 1:
+                            active_samples.pop(prev_step)
+
+                        merged_samples = defaultdict(list)
+                        for step_samples in active_samples.values():
+                            for key, value in step_samples.items():
+                                merged_samples[key] += value
+
+                        pairs = torch.LongTensor([[i, w] for i, w in enumerate(self.rconfig['active_buffer_weights']) if len(merged_samples[i]) > 0])
                         if len(pairs.view(-1)) > 0:
                             keys = pairs[:, 0].tolist()
                             weights = pairs[:, 1].tolist()
                             types = random.choices(keys, weights, k=self.config['dataloader']['batch_size'])
-                            wavs = [random.choice(active_samples[t])['wavs'] for t in types]
+                            wavs = [random.choice(merged_samples[t])['wavs'] for t in types]
                             lengths, wavs = trainloader.dataset.collate_fn(wavs)
 
                     wavs = wavs.to(device=self.device)
@@ -448,9 +457,6 @@ class Runner():
 
                     if self.args.active_sampling and self.global_step % int(self.rconfig['sampler_refresh_step']) == 0:
                         self._kill_sampler()
-
-                    if self.global_step % int(self.rconfig['active_refresh_step']) == 0:
-                        active_samples = defaultdict(list)
 
                     # evaluate and save the best
                     if self.global_step % int(self.rconfig['eval_step']) == 0:
