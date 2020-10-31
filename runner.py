@@ -381,7 +381,7 @@ class Runner():
                     if self.args.active_sampling:
                         prev_step = self.global_step - self.rconfig['active_refresh_step']
                         if prev_step > 1:
-                            active_samples.pop(prev_step)
+                            active_samples.pop(prev_step, None)
 
                         merged_samples = defaultdict(list)
                         for step_samples in active_samples.values():
