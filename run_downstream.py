@@ -73,6 +73,11 @@ def get_downstream_args():
     parser.add_argument('--n_iterate', type=int)
     parser.add_argument('--sync_sampler', action='store_true')
 
+    parser.add_argument('--train_speech')
+    parser.add_argument('--train_noise')
+    parser.add_argument('--test_speech')
+    parser.add_argument('--test_noise')
+
     parser.add_argument('--test', action='store_true')
     parser.add_argument('--test_gradient', action='store_true')
 
@@ -81,6 +86,13 @@ def get_downstream_args():
     if args.resume is None:
         setattr(args, 'gpu', not args.cpu)
         config = yaml.load(open(args.config, 'r'), Loader=yaml.FullLoader)
+        for overwrite in ['train_speech', 'train_noise', 'test_speech', 'test_noise']:
+            filestrs = eval(f'args.{overwrite}')
+            if filestrs is None: continue
+            dataset_type, data_type = overwrite.split('_')
+            config[f'OnlineDataset_{dataset_type}'][data_type]['filestrs'] = filestrs
+            if dataset_type == 'test':
+                config[f'OnlineDataset_record'][data_type]['filestrs'] = filestrs
     else:
         if os.path.isdir(args.resume):
             ckpts = glob.glob(f'{args.resume}/*.ckpt')
@@ -229,7 +241,6 @@ def main():
     expdir = os.path.join(f'{args.expdir}/{args.name}')
     if not os.path.exists(expdir):
         os.makedirs(expdir)
-    copyfile(args.config, os.path.join(expdir, args.config.split('/')[-1]))
 
     # get preprocessor
     preprocessor, upstream_feat_dim, downstream_feat_dim, tar_linear_dim = get_preprocessor(args, config)
