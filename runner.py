@@ -165,12 +165,14 @@ class Runner():
             ds_conf['speech'] = train_conf['speech']
             ds_conf['speech']['sample_num'] = self.args.dev_num
             ds_conf['speech']['select_sampled'] = True
+            ds_conf['half_noise'] = 'front'
         elif mode == 'test':
             ds_conf = test_conf
         elif mode == 'record':
             ds_conf = test_conf
             ds_conf['speech']['sample_num'] = self.args.record_num
             ds_conf['speech']['select_sampled'] = True
+            ds_conf['half_noise'] = 'front'
         elif mode == 'query':
             ds_conf = train_conf
             ds_conf['pseudo_modes'] = [3]

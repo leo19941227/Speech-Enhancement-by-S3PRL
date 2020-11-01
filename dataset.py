@@ -76,7 +76,7 @@ def add_noise(speech, noise, snrs, eps=1e-10):
 
 class OnlineDataset(Dataset):
     def __init__(self, speech, noise, sample_rate, max_time, min_time=0,
-                 target_level=-25, snrs=[3], infinite=False,
+                 target_level=-25, snrs=[3], infinite=False, half_noise=None,
                  pseudo_modes=None, pseudo_clean=None, pseudo_noise=None,
                  seed=0, eps=1e-8, **kwargs):
         self.sample_rate = sample_rate
@@ -84,6 +84,7 @@ class OnlineDataset(Dataset):
         self.min_time = min_time
         self.target_level = target_level
         self.infinite = infinite
+        self.half_noise = half_noise
         self.pseudo_modes = pseudo_modes
         self.pseudo_clean = pseudo_clean
         self.pseudo_noise = pseudo_noise
@@ -142,6 +143,14 @@ class OnlineDataset(Dataset):
             noise = random.choice(self.pseudo_noise)
         else:
             noise = self.load_data(noise_pth)
+        
+        if self.half_noise:
+            middle = len(noise) // 2
+            if self.half_noise == 'front':
+                noise = noise[:middle]
+            elif self.half_noise == 'end':
+                noise = noise[middle:]
+
         noise = self.normalize_wav_decibel(noise)
 
         # noisy

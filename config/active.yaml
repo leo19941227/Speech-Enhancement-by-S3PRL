@@ -87,3 +87,4 @@ OnlineDataset_test:
   max_time: 10000
   target_level: -25
   snrs: [-8, -6, -4, -2, 0, 2, 4, 6, 8]
+  half_noise: end
