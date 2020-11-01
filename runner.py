@@ -30,7 +30,7 @@ from sampler import *
 
 OOM_RETRY_LIMIT = 10
 MAX_POSITIONS_LEN = 16000 * 50
-LOG_WAV_NUM = 5
+LOG_WAV_NUM = 3
 
 
 def logging(logger, step, tag, data, mode='scalar', preprocessor=None):
@@ -399,6 +399,14 @@ class Runner():
                                 'wavs': wavs[idx, :, :lengths[idx].cpu()].transpose(-1, -2).contiguous(),
                                 'match_score': match_scores[idx],
                             })
+
+                        train_loggers.append(partial(self.logging, tag='active/query_noisy', data=query_wavs[:, 0, :], mode='audio'))
+                        train_loggers.append(partial(self.logging, tag='active/query_clean', data=query_wavs[:, 1, :], mode='audio'))
+                        train_loggers.append(partial(self.logging, tag='active/query_noise', data=query_wavs[:, 2, :], mode='audio'))
+                        if len(wavs[is_match]) > 0:
+                            train_loggers.append(partial(self.logging, tag='active/match_noisy', data=wavs[is_match][:, 0, :], mode='audio'))
+                            train_loggers.append(partial(self.logging, tag='active/match_clean', data=wavs[is_match][:, 1, :], mode='audio'))
+                            train_loggers.append(partial(self.logging, tag='active/match_noise', data=wavs[is_match][:, 2, :], mode='audio'))
 
                     if self.args.active_sampling:
                         prev_step = self.global_step - self.rconfig['active_refresh_step']
