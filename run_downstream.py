@@ -30,9 +30,8 @@ def get_downstream_args():
     parser.add_argument('--resume', help='Specify the downstream checkpoint path for continual training')
 
     parser.add_argument('--name', help='Name of current experiment.')
-    parser.add_argument('--trainset', default='OnlineDataset')
-    parser.add_argument('--testset', default='OnlineDataset')
     parser.add_argument('--n_jobs', default=12, type=int)
+    parser.add_argument('--dev_num', default=500, type=int)
 
     # upstream settings
     parser.add_argument('--upstream', choices=['transformer', 'baseline'], default='transformer', help='Specify the teacher model for distillation', required=False)

@@ -30,7 +30,7 @@ from sampler import *
 
 OOM_RETRY_LIMIT = 10
 MAX_POSITIONS_LEN = 16000 * 50
-LOG_WAV_NUM = 3
+LOG_WAV_NUM = 5
 
 
 def logging(logger, step, tag, data, mode='scalar', preprocessor=None):
@@ -151,20 +151,36 @@ class Runner():
         torch.save(all_states, model_path)
 
 
-    def get_dataset(self, mode='train'):
-        split = mode
-        if mode in ['subtrain', 'query']:
-            split = 'train'
-        elif mode in ['record']:
-            split = 'test'
+    def get_dataset(self, mode='train', ds_type='OnlineDataset'):
+        train_conf = copy.deepcopy(self.config[f'{ds_type}_train'])
+        test_conf = copy.deepcopy(self.config[f'{ds_type}_test'])
 
-        ds_type = eval(f'self.args.{split}set')
-        ds_conf = self.config[f'{ds_type}_{split}']
-
-        if mode == 'record':
-            ds_conf['speech']['sample_num_per_str'] = self.args.record_num
+        if mode == 'train':
+            ds_conf = train_conf
+        elif mode == 'subtrain':
+            ds_conf = train_conf
+            ds_conf['infinite'] = False
+        elif mode == 'dev':
+            ds_conf = test_conf
+            ds_conf['speech'] = train_conf['speech']
+            ds_conf['speech']['sample_num'] = self.args.dev_num
             ds_conf['speech']['select_sampled'] = True
-        
+        elif mode == 'test':
+            ds_conf = test_conf
+        elif mode == 'record':
+            ds_conf = test_conf
+            ds_conf['speech']['sample_num'] = self.args.record_num
+            ds_conf['speech']['select_sampled'] = True
+        elif mode == 'query':
+            ds_conf = train_conf
+            ds_conf['pseudo_modes'] = [3]
+        elif mode == 'query_dev':
+            ds_conf = test_conf
+            ds_conf['pseudo_modes'] = [3]
+            ds_conf['speech'] = train_conf['speech']
+            ds_conf['speech']['sample_num'] = self.args.dev_num
+            ds_conf['speech']['select_sampled'] = True
+
         if type(ds_conf.get('pseudo_modes')) is list:
             if self.pseudo_clean is None or self.pseudo_noise is None:
                 self._build_pseudo_wavs()
@@ -178,9 +194,6 @@ class Runner():
         if mode == 'subtrain':
             dataset = dataset.get_subset(n_file=100)
         
-        if mode == 'query':
-            dataset.pseudo_modes = [3]
-
         print(f'[Dataset] - {mode} dataset is created.')
         return dataset
 
@@ -300,7 +313,7 @@ class Runner():
         eval_metrics = self.rconfig['eval_metrics']
         for split_name in eval_splits:
             split_dataset = self.get_dataset(split_name)
-            split_dataloader = self.get_dataloader(split_dataset)
+            split_dataloader = self.get_dataloader(split_dataset, train=False)
             eval_settings.append((
                 split_name,
                 split_dataloader,

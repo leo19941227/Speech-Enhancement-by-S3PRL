@@ -26,7 +26,7 @@ class PseudoDataset(Dataset):
         # return: (time, 2)
 
 
-def filestrs2list(filestrs, fileroot=None, sample_num_per_str=0, select_sampled=False, **kwargs):
+def filestrs2list(filestrs, fileroot=None, sample_num=0, select_sampled=False, **kwargs):
     print(f'[filestrs2list] - Parsing filestrs: {filestrs}.')
 
     if type(filestrs) is not list:
@@ -40,12 +40,12 @@ def filestrs2list(filestrs, fileroot=None, sample_num_per_str=0, select_sampled=
             with open(filestr, 'r') as handle:
                 all_files += sorted([f'{fileroot}/{line[:-1]}' for line in handle.readlines()])
         else:
-            files = sorted(glob.glob(filestr))
-            random.seed(0)
-            random.shuffle(files)
-            files = files[:sample_num_per_str] if select_sampled else files[sample_num_per_str:]
-            all_files += sorted(files)
+            all_files += sorted(glob.glob(filestr))
+
     all_files = sorted(all_files)
+    random.seed(0)
+    random.shuffle(all_files)
+    all_files = all_files[:sample_num] if select_sampled else all_files[sample_num:]
 
     print(f'[filestrs2list] - Complete parsing: {len(all_files)} files found.')
     return all_files

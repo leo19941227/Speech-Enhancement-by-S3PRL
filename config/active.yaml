@@ -30,7 +30,7 @@ runner:
   active_query_num: 32
   active_buffer_weights: [1, 1, 1, 1]
   max_keep: 20                                           # maximum number of model ckpt to keep during training
-  eval_splits: ['subtrain', 'test']
+  eval_splits: ['subtrain', 'dev', 'query_dev', 'test']
   eval_metrics: ['stoi', 'pesq_nb', 'sisdr']
 
 objective:
@@ -62,6 +62,8 @@ model:
 OnlineDataset_train:
   speech:
     filestrs: '../datasets/speech_data/clean_trainset_wav_16k'
+    sample_num: 1000
+    select_sampled: False
   noise:
     filestrs: '../datasets/DNS-Challenge/datasets/noise'
 
@@ -76,7 +78,7 @@ OnlineDataset_train:
 OnlineDataset_test:
   speech:
     filestrs: '../datasets/speech_data/clean_testset_wav_16k/p232*'
-    sample_num_per_str: 10
+    sample_num: 10
     select_sampled: False
   noise:
     filestrs: '../datasets/noise_data/Nonspeech/bell'
