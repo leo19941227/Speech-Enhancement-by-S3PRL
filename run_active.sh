@@ -1,6 +1,6 @@
 #!/bin/bash
 
-noise_dir="../datasets/noise_data/Nonspeech/"
+noise_dir="../datasets/noise_data/Nonspeech_digits/"
 
 for noise_type in $(ls $noise_dir);
 do

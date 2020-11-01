@@ -66,6 +66,7 @@ def get_downstream_args():
     parser.add_argument('--wandb', action='store_true')
     parser.add_argument('--eval_init', action='store_true')
     parser.add_argument('--no_metric', action='store_true')
+    parser.add_argument('--save_best', action='store_true')
 
     parser.add_argument('--active_sampling', action='store_true')
     parser.add_argument('--sampler_device', type=int)

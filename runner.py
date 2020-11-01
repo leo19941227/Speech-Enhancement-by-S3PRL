@@ -311,7 +311,8 @@ class Runner():
 
                 if (scores > metrics_best).sum() > 0:
                     metrics_best.data = torch.max(scores, metrics_best).data
-                    self.save_model(split_name)
+                    if self.args.save_best:
+                        self.save_model(split_name)
 
                 if log_media:
                     for idx, wavs in enumerate(zip(*eval_wavs)):
@@ -460,8 +461,10 @@ class Runner():
 
                     # evaluate and save the best
                     if self.global_step % int(self.rconfig['eval_step']) == 0:
-                        self.save_model()
                         eval_and_log(log_media)
+
+                    if self.global_step % int(self.rconfig['save_step']) == 0:
+                        self.save_model()
 
                     del model_results
                     del objective_results
