@@ -152,10 +152,18 @@ class Runner():
 
 
     def get_dataset(self, mode='train'):
-        split = 'train' if mode in ['subtrain', 'query'] else mode
+        split = mode
+        if mode in ['subtrain', 'query']:
+            split = 'train'
+        elif mode in ['record']:
+            split = 'test'
 
         ds_type = eval(f'self.args.{split}set')
         ds_conf = self.config[f'{ds_type}_{split}']
+
+        if mode == 'record':
+            ds_conf['speech']['sample_num_per_str'] = self.args.record_num
+            ds_conf['speech']['select_sampled'] = True
         
         if type(ds_conf.get('pseudo_modes')) is list:
             if self.pseudo_clean is None or self.pseudo_noise is None:

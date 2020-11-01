@@ -32,7 +32,6 @@ def get_downstream_args():
     parser.add_argument('--name', help='Name of current experiment.')
     parser.add_argument('--trainset', default='OnlineDataset')
     parser.add_argument('--testset', default='OnlineDataset')
-    parser.add_argument('--recordset', default='OnlineDataset')
     parser.add_argument('--n_jobs', default=12, type=int)
 
     # upstream settings
@@ -69,6 +68,7 @@ def get_downstream_args():
     parser.add_argument('--save_best', action='store_true')
 
     parser.add_argument('--active_sampling', action='store_true')
+    parser.add_argument('--record_num', default=5, type=int)
     parser.add_argument('--sampler_device', type=int)
     parser.add_argument('--active_layerid', type=int)
     parser.add_argument('--n_iterate', type=int)
@@ -92,8 +92,6 @@ def get_downstream_args():
             if filestrs is None: continue
             dataset_type, data_type = overwrite.split('_')
             config[f'OnlineDataset_{dataset_type}'][data_type]['filestrs'] = filestrs
-            if dataset_type == 'test':
-                config[f'OnlineDataset_record'][data_type]['filestrs'] = filestrs
     else:
         if os.path.isdir(args.resume):
             ckpts = glob.glob(f'{args.resume}/*.ckpt')

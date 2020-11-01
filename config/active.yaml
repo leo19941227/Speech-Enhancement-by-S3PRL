@@ -73,20 +73,6 @@ OnlineDataset_train:
   pseudo_modes: [0, 1, 2, 3]
 
 
-OnlineDataset_record:
-  speech:
-    filestrs: '../datasets/speech_data/clean_testset_wav_16k/p232*'
-    sample_num_per_str: 5
-    select_sampled: True
-  noise:
-    filestrs: '../datasets/noise_data/Nonspeech/bell'
-
-  sample_rate: 16000
-  max_time: 10000
-  target_level: -25
-  snrs: [-8, -6, -4, -2, 0, 2, 4, 6, 8]
-
-
 OnlineDataset_test:
   speech:
     filestrs: '../datasets/speech_data/clean_testset_wav_16k/p232*'
