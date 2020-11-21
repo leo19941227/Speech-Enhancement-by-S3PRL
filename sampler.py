@@ -111,7 +111,6 @@ def scoring(args, config, preprocessor, model, criterion, ascending, lengths, wa
 
 
 def matching(query_scores, key_scores, eps=1e-12):
-    print(query_scores.shape, key_scores.shape)
     query_scores = query_scores / (query_scores.pow(2).sum(dim=-1, keepdim=True).pow(0.5) + eps)
     key_scores = key_scores / (key_scores.pow(2).sum(dim=-1, keepdim=True).pow(0.5) + eps)
     return torch.mm(key_scores, query_scores.mean(dim=0).unsqueeze(1)).reshape(-1)
