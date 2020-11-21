@@ -342,8 +342,8 @@ class Runner():
                         for tag, wav in zip(['noisy', 'clean', 'enhanced'], wavs):
                             self.logging(step=self.global_step, tag=f'{split_name}-{tag}-{idx}', data=wav, mode='audio')
 
-        if self.args.eval_init:
-            eval_and_log()
+        # if self.args.eval_init:
+        #     eval_and_log()
 
         trainset = self.get_dataset('train')
         if self.args.sync_sampler:

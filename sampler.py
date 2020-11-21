@@ -111,6 +111,7 @@ def scoring(args, config, preprocessor, model, criterion, ascending, lengths, wa
 
 
 def matching(query_scores, key_scores, eps=1e-12):
+    print(query_scores.shape, key_scores.shape)
     query_scores = query_scores / (query_scores.pow(2).sum(dim=-1, keepdim=True).pow(0.5) + eps)
     key_scores = key_scores / (key_scores.pow(2).sum(dim=-1, keepdim=True).pow(0.5) + eps)
     return torch.mm(key_scores, query_scores.mean(dim=0).unsqueeze(1)).reshape(-1)
@@ -215,3 +216,24 @@ def sampler_driver(
                 print('[Sampler] - Go on for finding new sampler samples.')
 
         print(f'[Sampler] - Dataloader exhuasted.')
+
+def hist_scoring(args, config, preprocessor, model, criterion, ascending, lengths, wavs, mean=False):
+    scaled_noise = wavs[:, -1]
+    scale, _ = torch.max(scaled_noise.abs(), dim=-1)
+    scaled_noise = scaled_noise / scale.unsqueeze(1)
+    scaled_noise.unsqueeze(1)
+
+    shape = scaled_noise.size()
+    complx = preprocessor._stft(scaled_noise.reshape(-1, shape[-1]), window=preprocessor._window)
+    complx = complx.reshape(shape[:-1] + complx.shape[-3:])
+    linear, phase = preprocessor._magphase(complx)
+    linear = torch.sqrt(linear)
+    noise_hist = (linear > linear.mean(dim=2, keepdim=True)).float().mean(dim=2)
+    noise_hist = noise_hist / torch.norm(noise_hist, p=2, dim=1, keepdim=True)
+    if mean:
+        return noise_hist.mean(dim=0, keepdim=True)
+    else:
+        return noise_hist
+
+def hist_thresholding(match_scores):
+    return match_scores > 0.8
